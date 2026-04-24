@@ -14,7 +14,9 @@ export interface SessionMeta {
   model?: string;
   version?: string;
   agent?: string;
+  agentColor?: string; // hex, used for the agent pill
   userName?: string;
+  organizationName?: string;
 }
 
 export interface NormalizedSession {
@@ -37,6 +39,7 @@ type RawEntry = {
   cwd?: string;
   version?: string;
   agentSetting?: string;
+  organizationName?: string;
   message?: {
     role?: string;
     model?: string;
@@ -72,7 +75,29 @@ function extractResultText(content: unknown): string {
   return "";
 }
 
-export function normalize(rawEntries: unknown[]): NormalizedSession {
+export interface EventFilters {
+  excludeUser?: string[];
+  excludeAssistant?: string[];
+  excludeTools?: string[];
+}
+
+function compilePatterns(pats?: string[]): RegExp[] | undefined {
+  if (!pats || pats.length === 0) return undefined;
+  return pats.map((p) => new RegExp(p, "i"));
+}
+
+function matchesAny(text: string, regexes: RegExp[] | undefined): boolean {
+  if (!regexes) return false;
+  return regexes.some((r) => r.test(text));
+}
+
+export function normalize(
+  rawEntries: unknown[],
+  filters?: EventFilters,
+): NormalizedSession {
+  const excludeUser = compilePatterns(filters?.excludeUser);
+  const excludeAssistant = compilePatterns(filters?.excludeAssistant);
+  const excludeTools = new Set(filters?.excludeTools ?? []);
   const meta: SessionMeta = {};
   const results = new Map<string, string>();
 
@@ -87,6 +112,11 @@ export function normalize(rawEntries: unknown[]): NormalizedSession {
       meta.model = entry.message.model;
     if (!meta.agent && typeof entry.agentSetting === "string")
       meta.agent = entry.agentSetting;
+    if (
+      !meta.organizationName &&
+      typeof entry.organizationName === "string"
+    )
+      meta.organizationName = entry.organizationName;
 
     if (entry.type !== "user") continue;
     const content = entry.message?.content;
@@ -117,6 +147,7 @@ export function normalize(rawEntries: unknown[]): NormalizedSession {
         events.push({ kind: "notification", ...notif });
         continue;
       }
+      if (matchesAny(trimmed, excludeUser)) continue;
       events.push({ kind: "user", text: trimmed });
       continue;
     }
@@ -126,8 +157,11 @@ export function normalize(rawEntries: unknown[]): NormalizedSession {
       if (!block || typeof block !== "object") continue;
       if (block.type === "text" && typeof block.text === "string") {
         const text = block.text.trim();
-        if (text) events.push({ kind: "assistant", text });
+        if (!text) continue;
+        if (matchesAny(text, excludeAssistant)) continue;
+        events.push({ kind: "assistant", text });
       } else if (block.type === "tool_use" && typeof block.name === "string") {
+        if (excludeTools.has(block.name)) continue;
         const resultText =
           typeof block.id === "string" ? results.get(block.id) : undefined;
         events.push({

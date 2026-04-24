@@ -1,0 +1,67 @@
+import { existsSync, readFileSync } from "node:fs";
+
+export interface EventFilters {
+  /** Regex patterns (case-insensitive) tested against user message text. */
+  excludeUser?: string[];
+  /** Regex patterns (case-insensitive) tested against assistant message text. */
+  excludeAssistant?: string[];
+  /** Tool names to drop entirely, e.g. `["Bash"]`. */
+  excludeTools?: string[];
+}
+
+export interface PlayerConfig {
+  sessionId: string;
+  user?: string;
+  agent?: {
+    name?: string;
+    color?: string; // hex (#d97757) or named (orange/blue/green/purple/red/yellow)
+  };
+  speed?: {
+    wpm?: number;
+    turnDelayMs?: number;
+    toolDelayMs?: number;
+    thinkMs?: number;
+  };
+  filters?: EventFilters;
+}
+
+export const NAMED_COLORS: Record<string, string> = {
+  orange: "#d97757",
+  blue: "#7c8cde",
+  green: "#5fa561",
+  purple: "#a97bd6",
+  red: "#e05252",
+  yellow: "#e0b83e",
+  pink: "#e07fc9",
+  teal: "#4fb8a8",
+};
+
+export function resolveColor(c: string | undefined): string | undefined {
+  if (!c) return undefined;
+  if (c.startsWith("#")) return c;
+  return NAMED_COLORS[c.toLowerCase()];
+}
+
+export function isConfigPath(arg: string): boolean {
+  return existsSync(arg) && /\.(jsonc?|json5?)$/i.test(arg);
+}
+
+export function loadConfig(path: string): PlayerConfig {
+  let raw = readFileSync(path, "utf8");
+  // Strip `// line` and `/* block */` comments so JSONC is accepted.
+  raw = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`Failed to parse config ${path}: ${(e as Error).message}`);
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    typeof (parsed as { sessionId?: unknown }).sessionId !== "string"
+  ) {
+    throw new Error(`Config ${path} must include a string "sessionId"`);
+  }
+  return parsed as PlayerConfig;
+}

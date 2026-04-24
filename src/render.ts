@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { homedir } from "node:os";
 import type { PlayEvent, SessionMeta } from "./events.js";
+import { renderClawdRows } from "./clawd.js";
 import { renderMarkdown } from "./markdown.js";
 
 export interface RenderOptions {
@@ -14,7 +15,6 @@ export interface RenderOptions {
 const GREEN = chalk.hex("#5fa561");
 const DIM = chalk.dim;
 const BRAND = chalk.hex("#d97757"); // Claude brand orange
-const EYE = chalk.hex("#1a1a1a");
 const ASK_BLUE = chalk.hex("#7c8cde"); // AskUserQuestion accent
 
 const SPINNER_FRAMES = ["✶", "✳", "✻", "✽", "✢", "·"];
@@ -31,16 +31,6 @@ const THINKING_VERBS = [
   "Contemplating",
   "Noodling",
 ];
-
-const SPRITE_WIDTH = 12;
-function renderSprite(): string[] {
-  return [
-    BRAND("████████████"),
-    BRAND("██") + EYE("██") + BRAND("████") + EYE("██") + BRAND("██"),
-    BRAND("████████████"),
-    " " + BRAND("██") + "      " + BRAND("██") + " ",
-  ];
-}
 
 // Input-box layout (5 lines tall):
 //   0: divider (with agent pill)
@@ -104,18 +94,29 @@ export function renderHeader(meta: SessionMeta): string {
   const rightSegW = rightW + 2;
   const totalW = leftSegW + rightSegW + 3;
 
-  const version = meta.version ? `v${meta.version}` : "";
-  const title = ` Claude Code${version ? " " + version : ""} `;
-
-  const topLeft = "─" + title + "─".repeat(Math.max(1, leftSegW - 1 - title.length));
-  const top = chalk.dim("╭") + chalk.dim(topLeft) + chalk.dim("┬") +
-    chalk.dim("─".repeat(rightSegW)) + chalk.dim("╮");
+  const titleStyled =
+    " " +
+    BRAND("Claude Code") +
+    (meta.version ? " " + DIM(`v${meta.version}`) : "") +
+    " ";
+  const topLeft =
+    chalk.dim("─") +
+    titleStyled +
+    chalk.dim(
+      "─".repeat(Math.max(1, leftSegW - 1 - visibleLen(titleStyled))),
+    );
+  const top =
+    chalk.dim("╭") +
+    topLeft +
+    chalk.dim("┬") +
+    chalk.dim("─".repeat(rightSegW)) +
+    chalk.dim("╮");
   const bottom = chalk.dim("╰" + "─".repeat(leftSegW) + "┴" + "─".repeat(rightSegW) + "╯");
 
   // Left column content.
   const greet = `Welcome back${meta.userName ? " " + meta.userName : ""}!`;
   const model = friendlyModel(meta.model);
-  const sprite = renderSprite();
+  const sprite = renderClawdRows();
 
   const left: string[] = [];
   left.push("");
@@ -124,7 +125,10 @@ export function renderHeader(meta: SessionMeta): string {
   for (const r of sprite) left.push(r);
   left.push("");
   if (model) {
-    left.push(DIM(truncateVis(`${model} with medium effort · Claude API`, leftW)));
+    const modelLine = `${model} with medium effort · Claude API${
+      meta.organizationName ? ` · ${meta.organizationName}` : ""
+    }`;
+    left.push(DIM(truncateVis(modelLine, leftW)));
   }
   const cwd = tildePath(meta.cwd);
   if (meta.agent) left.push(DIM(truncateVis(`@${meta.agent}`, leftW)));
@@ -167,7 +171,14 @@ export function renderHeader(meta: SessionMeta): string {
   // Guard: for very narrow terminals, fall back to a 1-column layout.
   if (totalW > termWidth()) {
     const fallback =
-      chalk.dim("╭─") + title + chalk.dim("─".repeat(Math.max(1, termWidth() - title.length - 3))) + chalk.dim("╮");
+      chalk.dim("╭─") +
+      titleStyled +
+      chalk.dim(
+        "─".repeat(
+          Math.max(1, termWidth() - visibleLen(titleStyled) - 3),
+        ),
+      ) +
+      chalk.dim("╮");
     return fallback; // extremely narrow — just show title bar
   }
 
@@ -190,9 +201,10 @@ function renderInputBoxLines(meta: SessionMeta, typed: string): string[] {
   const width = termWidth();
   const agentTag = meta.agent ? ` ${meta.agent} ` : "";
   const leftDash = "─".repeat(Math.max(1, width - agentTag.length));
+  const pillColor = meta.agentColor ?? "#d97757";
   const divider =
     DIM(leftDash) +
-    (agentTag ? chalk.bgHex("#d97757").hex("#1a1a1a")(agentTag) : "");
+    (agentTag ? chalk.bgHex(pillColor).hex("#1a1a1a")(agentTag) : "");
 
   const prompt = renderPromptLine(typed);
 

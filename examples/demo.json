@@ -1,0 +1,24 @@
+{
+  "sessionId": "00000000-0000-0000-0000-000000000000",
+  "user": "John",
+  "agent": {
+    "name": "my-agent",
+    "color": "orange"
+  },
+  "speed": {
+    "wpm": 3500,
+    "turnDelayMs": 800,
+    "toolDelayMs": 400,
+    "thinkMs": 1400
+  },
+  "filters": {
+    "excludeUser": [
+      "^skip$",
+      "^continue$",
+      "^go ahead$",
+      "^try again",
+      "^keep going"
+    ],
+    "excludeTools": []
+  }
+}
