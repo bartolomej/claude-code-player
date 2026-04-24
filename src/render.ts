@@ -75,66 +75,113 @@ function friendlyModel(model?: string): string | undefined {
   return model;
 }
 
+function visibleLen(s: string): number {
+  return s.replace(ANSI_RE, "").length;
+}
+
+function padRightVis(s: string, width: number): string {
+  const pad = Math.max(0, width - visibleLen(s));
+  return s + " ".repeat(pad);
+}
+
+function centerVis(s: string, width: number): string {
+  const pad = Math.max(0, width - visibleLen(s));
+  const l = Math.floor(pad / 2);
+  return " ".repeat(l) + s + " ".repeat(pad - l);
+}
+
+function truncateVis(s: string, width: number): string {
+  if (visibleLen(s) <= width) return s;
+  return s.slice(0, Math.max(0, width - 1)) + "…";
+}
+
 export function renderHeader(meta: SessionMeta): string {
-  const width = Math.min(termWidth(), 90);
+  const width = Math.min(termWidth(), 110);
+  const leftW = Math.max(30, Math.floor(width * 0.58)) - 2; // content width
+  const rightW = Math.max(24, width - leftW - 7); // content width of right col
+  const leftSegW = leftW + 2;
+  const rightSegW = rightW + 2;
+  const totalW = leftSegW + rightSegW + 3;
+
   const version = meta.version ? `v${meta.version}` : "";
   const title = ` Claude Code${version ? " " + version : ""} `;
+
+  const topLeft = "─" + title + "─".repeat(Math.max(1, leftSegW - 1 - title.length));
+  const top = chalk.dim("╭") + chalk.dim(topLeft) + chalk.dim("┬") +
+    chalk.dim("─".repeat(rightSegW)) + chalk.dim("╮");
+  const bottom = chalk.dim("╰" + "─".repeat(leftSegW) + "┴" + "─".repeat(rightSegW) + "╯");
+
+  // Left column content.
+  const greet = `Welcome back${meta.userName ? " " + meta.userName : ""}!`;
   const model = friendlyModel(meta.model);
-  const cwd = tildePath(meta.cwd);
-
-  const top =
-    "╭─" + title + "─".repeat(Math.max(1, width - title.length - 3)) + "╮";
-  const bottom = "╰" + "─".repeat(width - 2) + "╯";
-
   const sprite = renderSprite();
-  const infoLines: string[] = [];
-  infoLines.push("");
-  infoLines.push("Welcome back!");
-  infoLines.push("");
-  if (model) infoLines.push(`${model} · Claude API`);
-  const locParts: string[] = [];
-  if (meta.agent) locParts.push(`@${meta.agent}`);
-  if (cwd) locParts.push(cwd);
-  if (locParts.length) infoLines.push(locParts.join(" · "));
 
-  const rows = Math.max(sprite.length, infoLines.length);
-  const paddedSprite: string[] = [...sprite];
-  while (paddedSprite.length < rows) paddedSprite.push(" ".repeat(SPRITE_WIDTH));
-  const paddedInfo: string[] = [...infoLines];
-  while (paddedInfo.length < rows) paddedInfo.push("");
-  // Pad one blank row top & bottom inside the box.
-  paddedSprite.unshift(" ".repeat(SPRITE_WIDTH));
-  paddedSprite.push(" ".repeat(SPRITE_WIDTH));
-  paddedInfo.unshift("");
-  paddedInfo.push("");
+  const left: string[] = [];
+  left.push("");
+  left.push(chalk.bold(greet));
+  left.push("");
+  for (const r of sprite) left.push(r);
+  left.push("");
+  if (model) {
+    left.push(DIM(truncateVis(`${model} with medium effort · Claude API`, leftW)));
+  }
+  const cwd = tildePath(meta.cwd);
+  if (meta.agent) left.push(DIM(truncateVis(`@${meta.agent}`, leftW)));
+  if (cwd) left.push(DIM(truncateVis(cwd, leftW)));
+  left.push("");
 
-  // 2 (left border "│ ") + sprite + 2 (separator "  ") + infoW + 2 (right " │") = width
-  const infoW = width - SPRITE_WIDTH - 6;
-  const body = paddedSprite
-    .map((r, i) => {
-      const raw = paddedInfo[i] ?? "";
-      const info = raw.padEnd(infoW, " ").slice(0, infoW);
-      const styled =
-        raw.trim() === "Welcome back!"
-          ? chalk.bold(info.trimEnd()) +
-            " ".repeat(info.length - info.trimEnd().length)
-          : DIM(info);
-      return "│ " + r + "  " + styled + " │";
+  // Right column content: tips + activity.
+  const tipText = "Run /init to create a CLAUDE.md file with instructions for Claude";
+  const right: string[] = [];
+  right.push("");
+  right.push(BRAND.bold("Tips for getting started"));
+  right.push(truncateVis(tipText, rightW));
+  right.push("");
+  right.push(BRAND.bold("Recent activity"));
+  right.push(DIM("No recent activity"));
+  right.push("");
+
+  const rows = Math.max(left.length, right.length);
+  while (left.length < rows) left.push("");
+  while (right.length < rows) right.push("");
+
+  const body = left
+    .map((l, i) => {
+      const r = right[i] ?? "";
+      // Center the greeting and sprite rows; left-align everything else.
+      const leftFormatted =
+        i === 1 || (i >= 3 && i < 3 + sprite.length)
+          ? centerVis(l, leftW)
+          : padRightVis(l, leftW);
+      return (
+        chalk.dim("│ ") +
+        leftFormatted +
+        chalk.dim(" │ ") +
+        padRightVis(r, rightW) +
+        chalk.dim(" │")
+      );
     })
     .join("\n");
 
-  return [chalk.dim(top), body, chalk.dim(bottom)].join("\n");
+  // Guard: for very narrow terminals, fall back to a 1-column layout.
+  if (totalW > termWidth()) {
+    const fallback =
+      chalk.dim("╭─") + title + chalk.dim("─".repeat(Math.max(1, termWidth() - title.length - 3))) + chalk.dim("╮");
+    return fallback; // extremely narrow — just show title bar
+  }
+
+  return [top, body, bottom].join("\n");
 }
 
 // --- Input box -------------------------------------------------------------
 
 function renderPromptLine(typed: string): string {
   const width = termWidth();
-  const caret = DIM("›");
-  // Trailing inverse space = blinking-cursor-ish block.
+  const caret = chalk.bold("›");
   const cursor = chalk.inverse(" ");
   const maxLen = Math.max(10, width - 6);
-  const shown = typed.length > maxLen ? "…" + typed.slice(-(maxLen - 1)) : typed;
+  const shown =
+    typed.length > maxLen ? "…" + typed.slice(-(maxLen - 1)) : typed;
   return `${caret} ${shown}${cursor}`;
 }
 

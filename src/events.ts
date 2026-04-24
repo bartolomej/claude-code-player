@@ -13,6 +13,7 @@ export interface SessionMeta {
   model?: string;
   version?: string;
   agent?: string;
+  userName?: string;
 }
 
 export interface NormalizedSession {

@@ -15,6 +15,7 @@ function usage(): never {
       "  --tool-delay <ms>   Pause after a tool indicator (default 400)",
       "  --think-ms <ms>     Thinking-spinner duration (default 1400, 0 disables)",
       "  --agent <name>      Override/force the agent label (default: read from session)",
+      "  --user <name>       User greeting name (default: $USER)",
       "  -h, --help          Show this help",
       "",
     ].join("\n"),
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
       "tool-delay": { type: "string" },
       "think-ms": { type: "string" },
       agent: { type: "string" },
+      user: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -48,6 +50,11 @@ async function main(): Promise<void> {
   const lines = await readSessionLines(path);
   const { meta, events } = normalize(lines);
   if (values.agent) meta.agent = values.agent;
+  const envUser = process.env.USER ?? process.env.USERNAME;
+  const defaultUser = envUser
+    ? envUser.charAt(0).toUpperCase() + envUser.slice(1)
+    : undefined;
+  meta.userName = values.user ?? defaultUser;
 
   if (events.length === 0) {
     process.stderr.write("No playable events found in this session.\n");
