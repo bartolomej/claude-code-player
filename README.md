@@ -1,4 +1,4 @@
-<img width="672" height="214" alt="Screenshot 2026-04-24 at 15 56 13" src="https://github.com/user-attachments/assets/2490fac9-e18e-4a18-90ce-b7a1e7162e4a" />
+<img width="1354" height="433" alt="Screenshot 2026-04-24 at 15 59 57" src="https://github.com/user-attachments/assets/6ce3be2e-f8e4-4f4b-98a3-0014b6cc6fae" />
 
 
 ## Why this exists
