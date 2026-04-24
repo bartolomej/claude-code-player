@@ -15,6 +15,7 @@ const GREEN = chalk.hex("#5fa561");
 const DIM = chalk.dim;
 const BRAND = chalk.hex("#d97757"); // Claude brand orange
 const EYE = chalk.hex("#1a1a1a");
+const ASK_BLUE = chalk.hex("#7c8cde"); // AskUserQuestion accent
 
 const SPINNER_FRAMES = ["✶", "✳", "✻", "✽", "✢", "·"];
 const THINKING_VERBS = [
@@ -333,40 +334,60 @@ async function renderQuestionCard(
   answer: string | undefined,
 ): Promise<void> {
   const width = termWidth();
-  const BAR = DIM("│");
   const out = process.stdout;
 
-  if (q.header) out.write(BAR + " " + chalk.bold(q.header) + "\n");
-  out.write(BAR + " " + q.question + "\n");
-  out.write(BAR + "\n");
-
-  const markerOffsets: number[] = [];
-  let linesBelow = 0;
-  for (const opt of q.options) {
-    markerOffsets.push(linesBelow);
-    out.write(BAR + "   " + DIM("○") + " " + opt.label + "\n");
-    linesBelow++;
-    if (opt.description) {
-      const desc = truncate(opt.description, Math.max(20, width - 8));
-      out.write(BAR + "     " + DIM(desc) + "\n");
-      linesBelow++;
-    }
+  // Header pill: "□ {header}" with blue-ish background and dark text.
+  if (q.header) {
+    out.write(chalk.bgHex("#7c8cde").hex("#1a1a1a")(` □ ${q.header} `) + "\n\n");
   }
 
-  await sleep(550);
+  // Question: bold, wrapped to terminal width.
+  out.write(chalk.bold(wrap(q.question, width, "", "")) + "\n\n");
+
+  const labelLineOffsets: number[] = [];
+  let linesBelow = 0;
+
+  q.options.forEach((opt, i) => {
+    labelLineOffsets.push(linesBelow);
+    out.write(`  ${i + 1}. ${opt.label}\n`);
+    linesBelow++;
+    if (opt.description) {
+      const desc = truncate(opt.description, Math.max(20, width - 6));
+      out.write(`     ${DIM(desc)}\n`);
+      linesBelow++;
+    }
+  });
+
+  // Built-in trailing items that always appear in Claude Code's picker.
+  const typeNum = q.options.length + 1;
+  const chatNum = q.options.length + 2;
+  out.write(`  ${typeNum}. Type something.\n`);
+  linesBelow++;
+  out.write(DIM("─".repeat(Math.min(width, 60))) + "\n");
+  linesBelow++;
+  out.write(`  ${chatNum}. Chat about this\n`);
+  linesBelow++;
+  out.write("\n");
+  linesBelow++;
+  out.write(
+    DIM("Enter to select · ↑/↓ to navigate · Esc to cancel") + "\n",
+  );
+  linesBelow++;
+
+  await sleep(600);
 
   const selected = selectedIndices(q.options, answer);
   for (const idx of selected) {
-    const offset = markerOffsets[idx];
+    const offset = labelLineOffsets[idx];
     const upBy = linesBelow - offset;
     out.write(`\x1b[${upBy}A\r\x1b[2K`);
     out.write(
-      BAR + "   " + GREEN("●") + " " + chalk.bold(q.options[idx].label),
+      `${ASK_BLUE("›")} ${idx + 1}. ${ASK_BLUE(q.options[idx].label)}`,
     );
     out.write(`\x1b[${upBy}B\r`);
-    await sleep(220);
+    await sleep(240);
   }
-  await sleep(300);
+  await sleep(350);
 }
 
 function renderAskUserSummary(
