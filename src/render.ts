@@ -11,10 +11,10 @@ export interface RenderOptions {
 }
 
 // Claude Code-ish palette.
-const GREEN = chalk.hex("#5fa561"); // muted forest green
+const GREEN = chalk.hex("#5fa561");
 const DIM = chalk.dim;
-const SPRITE = chalk.hex("#a97bd6"); // muted purple for the ✻
 const BRAND = chalk.hex("#d97757"); // Claude brand orange
+const EYE = chalk.hex("#1a1a1a");
 
 const SPINNER_FRAMES = ["✶", "✳", "✻", "✽", "✢", "·"];
 const THINKING_VERBS = [
@@ -30,6 +30,25 @@ const THINKING_VERBS = [
   "Contemplating",
   "Noodling",
 ];
+
+const SPRITE_WIDTH = 12;
+function renderSprite(): string[] {
+  return [
+    BRAND("████████████"),
+    BRAND("██") + EYE("██") + BRAND("████") + EYE("██") + BRAND("██"),
+    BRAND("████████████"),
+    " " + BRAND("██") + "      " + BRAND("██") + " ",
+  ];
+}
+
+// Input-box layout (5 lines tall):
+//   0: divider (with agent pill)
+//   1: blank
+//   2: prompt
+//   3: blank
+//   4: status bar
+const BOX_LINES = 5;
+const PROMPT_LINE_IDX = 2;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -56,13 +75,6 @@ function friendlyModel(model?: string): string | undefined {
   return model;
 }
 
-const ROBOT = [
-  " ▟▀▀▀▀▀▙ ",
-  " ▌ ◉ ◉ ▐ ",
-  " ▌  ─  ▐ ",
-  " ▜▄▄▄▄▄▛ ",
-];
-
 export function renderHeader(meta: SessionMeta): string {
   const width = Math.min(termWidth(), 90);
   const version = meta.version ? `v${meta.version}` : "";
@@ -70,58 +82,81 @@ export function renderHeader(meta: SessionMeta): string {
   const model = friendlyModel(meta.model);
   const cwd = tildePath(meta.cwd);
 
-  const top = "╭─" + title + "─".repeat(Math.max(1, width - title.length - 3)) + "╮";
+  const top =
+    "╭─" + title + "─".repeat(Math.max(1, width - title.length - 3)) + "╮";
   const bottom = "╰" + "─".repeat(width - 2) + "╯";
 
-  const robotW = ROBOT[0].length;
-  const infoLines: string[] = ["", "Welcome back!", ""];
+  const sprite = renderSprite();
+  const infoLines: string[] = [];
+  infoLines.push("");
+  infoLines.push("Welcome back!");
+  infoLines.push("");
   if (model) infoLines.push(`${model} · Claude API`);
   const locParts: string[] = [];
   if (meta.agent) locParts.push(`@${meta.agent}`);
   if (cwd) locParts.push(cwd);
   if (locParts.length) infoLines.push(locParts.join(" · "));
-  infoLines.push("");
 
-  // Pad robot and info to equal height.
-  const rows = Math.max(ROBOT.length, infoLines.length);
-  const paddedRobot = [...ROBOT];
-  while (paddedRobot.length < rows) paddedRobot.push(" ".repeat(robotW));
-  const paddedInfo = [...infoLines];
+  const rows = Math.max(sprite.length, infoLines.length);
+  const paddedSprite: string[] = [...sprite];
+  while (paddedSprite.length < rows) paddedSprite.push(" ".repeat(SPRITE_WIDTH));
+  const paddedInfo: string[] = [...infoLines];
   while (paddedInfo.length < rows) paddedInfo.push("");
-  // Top/bottom pad by one blank row inside the box.
-  paddedRobot.unshift(" ".repeat(robotW));
-  paddedRobot.push(" ".repeat(robotW));
+  // Pad one blank row top & bottom inside the box.
+  paddedSprite.unshift(" ".repeat(SPRITE_WIDTH));
+  paddedSprite.push(" ".repeat(SPRITE_WIDTH));
   paddedInfo.unshift("");
   paddedInfo.push("");
 
-  const infoW = width - 2 - robotW - 3; // box sides + robot + " | "
-  const body = paddedRobot
+  // 2 (left border "│ ") + sprite + 2 (separator "  ") + infoW + 2 (right " │") = width
+  const infoW = width - SPRITE_WIDTH - 6;
+  const body = paddedSprite
     .map((r, i) => {
-      const info = (paddedInfo[i] ?? "").padEnd(infoW, " ").slice(0, infoW);
-      const infoStyled = i === 2 && info.trim() === "Welcome back!"
-        ? chalk.bold(info.trimEnd()) + " ".repeat(info.length - info.trimEnd().length)
-        : DIM(info);
-      return "│" + BRAND(r) + " " + infoStyled + " │";
+      const raw = paddedInfo[i] ?? "";
+      const info = raw.padEnd(infoW, " ").slice(0, infoW);
+      const styled =
+        raw.trim() === "Welcome back!"
+          ? chalk.bold(info.trimEnd()) +
+            " ".repeat(info.length - info.trimEnd().length)
+          : DIM(info);
+      return "│ " + r + "  " + styled + " │";
     })
     .join("\n");
 
   return [chalk.dim(top), body, chalk.dim(bottom)].join("\n");
 }
 
-function renderInputBar(meta: SessionMeta): string {
+// --- Input box -------------------------------------------------------------
+
+function renderPromptLine(typed: string): string {
+  const width = termWidth();
+  const caret = DIM("›");
+  // Trailing inverse space = blinking-cursor-ish block.
+  const cursor = chalk.inverse(" ");
+  const maxLen = Math.max(10, width - 6);
+  const shown = typed.length > maxLen ? "…" + typed.slice(-(maxLen - 1)) : typed;
+  return `${caret} ${shown}${cursor}`;
+}
+
+function renderInputBoxLines(meta: SessionMeta, typed: string): string[] {
   const width = termWidth();
   const agentTag = meta.agent ? ` ${meta.agent} ` : "";
-  const leftDash = "─".repeat(Math.max(1, width - agentTag.length - 1));
-  const divider = DIM(leftDash) + (agentTag ? chalk.bgHex("#d97757").black(agentTag) : "");
+  const leftDash = "─".repeat(Math.max(1, width - agentTag.length));
+  const divider =
+    DIM(leftDash) +
+    (agentTag ? chalk.bgHex("#d97757").hex("#1a1a1a")(agentTag) : "");
 
-  const prompt = DIM("›") + " " + chalk.inverse(" ");
-  const left = DIM("? for shortcuts");
-  const right = DIM("◐ medium · /effort");
-  const gap = " ".repeat(Math.max(2, width - left.length - right.length));
-  const status = left + gap + right;
+  const prompt = renderPromptLine(typed);
 
-  return ["", divider, "", prompt, "", status].join("\n");
+  const leftRaw = "? for shortcuts";
+  const rightRaw = "◐ medium · /effort";
+  const gap = " ".repeat(Math.max(2, width - leftRaw.length - rightRaw.length));
+  const status = DIM(leftRaw) + gap + DIM(rightRaw);
+
+  return [divider, "", prompt, "", status];
 }
+
+// --- Text helpers ----------------------------------------------------------
 
 function wrap(
   text: string,
@@ -155,7 +190,7 @@ function wrap(
   return out.join("\n");
 }
 
-function renderUser(text: string): string {
+function renderUserTranscript(text: string): string {
   return wrap(text, termWidth(), DIM("> "), "  ");
 }
 
@@ -234,7 +269,10 @@ function parseAskAnswers(resultText: string): Map<string, string> {
   return map;
 }
 
-function selectedIndices(options: AskOption[], answer: string | undefined): number[] {
+function selectedIndices(
+  options: AskOption[],
+  answer: string | undefined,
+): number[] {
   if (!answer) return [];
   const out: number[] = [];
   for (let i = 0; i < options.length; i++) {
@@ -251,12 +289,10 @@ async function renderQuestionCard(
   const BAR = DIM("│");
   const out = process.stdout;
 
-  // Header + question.
   if (q.header) out.write(BAR + " " + chalk.bold(q.header) + "\n");
   out.write(BAR + " " + q.question + "\n");
   out.write(BAR + "\n");
 
-  // Options — remember marker-line offsets (0-based from first option line).
   const markerOffsets: number[] = [];
   let linesBelow = 0;
   for (const opt of q.options) {
@@ -276,9 +312,10 @@ async function renderQuestionCard(
   for (const idx of selected) {
     const offset = markerOffsets[idx];
     const upBy = linesBelow - offset;
-    // Move up, clear line, rewrite with filled marker, return.
     out.write(`\x1b[${upBy}A\r\x1b[2K`);
-    out.write(BAR + "   " + GREEN("●") + " " + chalk.bold(q.options[idx].label));
+    out.write(
+      BAR + "   " + GREEN("●") + " " + chalk.bold(q.options[idx].label),
+    );
     out.write(`\x1b[${upBy}B\r`);
     await sleep(220);
   }
@@ -354,20 +391,28 @@ function streamChunks(ansi: string): string[] {
   return chunks;
 }
 
+async function streamAnsi(
+  ansi: string,
+  perVisibleCharMs: number,
+): Promise<void> {
+  for (const chunk of streamChunks(ansi)) {
+    process.stdout.write(chunk);
+    const visible = chunk.replace(ANSI_RE, "").length;
+    await sleep(Math.max(1, Math.round(visible * perVisibleCharMs)));
+  }
+}
+
 async function runSpinner(verb: string, totalMs: number): Promise<void> {
   if (totalMs <= 0) return;
   const frameMs = 110;
   const start = Date.now();
-  // Fake token counter that grows while "thinking" — pure demo flavor.
   const tokensPerSec = 60 + Math.floor(Math.random() * 40);
   let i = 0;
   const draw = () => {
     const elapsedSec = (Date.now() - start) / 1000;
     const tokens = Math.floor(elapsedSec * tokensPerSec);
     const tokStr =
-      tokens >= 1000
-        ? (tokens / 1000).toFixed(1) + "k"
-        : tokens.toString();
+      tokens >= 1000 ? (tokens / 1000).toFixed(1) + "k" : tokens.toString();
     const glyph = BRAND(SPINNER_FRAMES[i % SPINNER_FRAMES.length]);
     const suffix = DIM(`(${elapsedSec.toFixed(0)}s · ↑ ${tokStr} tokens)`);
     process.stdout.write(`\r\x1b[2K${glyph} ${chalk.bold(verb)}… ${suffix}`);
@@ -384,15 +429,15 @@ function pickVerb(): string {
   return THINKING_VERBS[Math.floor(Math.random() * THINKING_VERBS.length)];
 }
 
-async function streamAnsi(ansi: string, perVisibleCharMs: number): Promise<void> {
-  for (const chunk of streamChunks(ansi)) {
-    process.stdout.write(chunk);
-    const visible = chunk.replace(ANSI_RE, "").length;
-    await sleep(Math.max(1, Math.round(visible * perVisibleCharMs)));
-  }
-}
+// --- Main loop with persistent input box -----------------------------------
 
-// --- Main loop -------------------------------------------------------------
+function typingDelay(ch: string): number {
+  const base = 32 + Math.random() * 40;
+  if (ch === " ") return base + 20;
+  if (/[.!?,;:]/.test(ch)) return base + 100;
+  if (ch === "\n") return base + 120;
+  return base;
+}
 
 export async function play(
   events: PlayEvent[],
@@ -400,28 +445,54 @@ export async function play(
   opts: RenderOptions,
 ): Promise<void> {
   const perChar = Math.max(1, Math.round(10000 / opts.wpm));
+  let boxDrawn = false;
 
-  process.stdout.write(renderHeader(meta) + "\n");
+  const drawBox = (typed = "") => {
+    const lines = renderInputBoxLines(meta, typed);
+    for (const l of lines) process.stdout.write(l + "\n");
+    boxDrawn = true;
+  };
+  const clearBox = () => {
+    if (!boxDrawn) return;
+    process.stdout.write(`\x1b[${BOX_LINES}A\r\x1b[0J`);
+    boxDrawn = false;
+  };
+  const updatePrompt = (typed: string) => {
+    if (!boxDrawn) return;
+    const up = BOX_LINES - PROMPT_LINE_IDX;
+    process.stdout.write(
+      `\x1b[${up}A\r\x1b[2K${renderPromptLine(typed)}\x1b[${up}B\r`,
+    );
+  };
+
+  process.stdout.write(renderHeader(meta) + "\n\n");
+  drawBox();
 
   for (let i = 0; i < events.length; i++) {
     const e = events[i];
     const prev = events[i - 1];
-
-    if (prev) {
-      if (prev.kind === "tool" && e.kind === "tool") {
-        process.stdout.write("\n");
-      } else {
-        process.stdout.write("\n\n");
-      }
-    }
+    const next = events[i + 1];
 
     if (e.kind === "user") {
-      process.stdout.write(renderUser(e.text));
-      await sleep(opts.turnDelayMs);
+      if (!boxDrawn) drawBox();
+      await sleep(350);
+      let typed = "";
+      for (const ch of e.text) {
+        typed += ch;
+        updatePrompt(typed);
+        await sleep(typingDelay(ch));
+      }
+      await sleep(450); // pause after typing, before submit
+      // Submit: clear the box, print transcript, redraw empty box.
+      clearBox();
+      process.stdout.write(renderUserTranscript(e.text) + "\n\n");
+      drawBox();
       continue;
     }
 
-    // Spinner before model output: full on a fresh turn, shorter after a tool.
+    // Non-user: clear box, render content, maybe redraw box at end.
+    clearBox();
+
     if (prev?.kind === "user") {
       await runSpinner(pickVerb(), opts.thinkMs);
     } else if (prev?.kind === "tool") {
@@ -429,17 +500,23 @@ export async function play(
     }
 
     if (e.kind === "assistant") {
-      const body = renderMarkdown(e.text);
-      await streamAnsi(prefixAssistant(body), perChar);
-      await sleep(opts.turnDelayMs);
+      await streamAnsi(prefixAssistant(renderMarkdown(e.text)), perChar);
     } else if (e.name === "AskUserQuestion") {
       await renderAskUser(e.input, e.resultText);
-      await sleep(opts.turnDelayMs);
     } else {
       process.stdout.write(renderTool(e.name, e.input));
-      await sleep(opts.toolDelayMs);
     }
+
+    // Spacing, then only redraw box if the next event will want the box
+    // (i.e. it's a user turn or this is the final event).
+    process.stdout.write("\n\n");
+    if (!next || next.kind === "user") {
+      drawBox();
+    } else if (next.kind === "tool" && e.kind === "tool") {
+      // Chained tools: a touch of extra spacing already handled above.
+    }
+    await sleep(opts.toolDelayMs);
   }
-  process.stdout.write("\n\n");
-  process.stdout.write(renderInputBar(meta) + "\n");
+
+  if (!boxDrawn) drawBox();
 }
