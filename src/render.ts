@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import type { PlayEvent } from "./events.js";
+import { renderMarkdown } from "./markdown.js";
 
 export interface RenderOptions {
   wpm: number;
@@ -10,30 +11,65 @@ export interface RenderOptions {
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function charDelayMs(wpm: number): number {
-  // ~6 chars per word including trailing space.
-  const charsPerSec = (wpm * 6) / 60;
-  return Math.max(1, Math.round(1000 / charsPerSec));
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+
+/**
+ * Split an ANSI-colored string into stream-friendly chunks of a few visible
+ * characters each, keeping ANSI escape sequences intact within a single chunk.
+ * Chunk size varies slightly to feel more like real token streaming.
+ */
+function streamChunks(ansi: string): string[] {
+  const tokens: { ansi: boolean; text: string }[] = [];
+  let i = 0;
+  while (i < ansi.length) {
+    ANSI_RE.lastIndex = i;
+    const m = ANSI_RE.exec(ansi);
+    if (m && m.index === i) {
+      tokens.push({ ansi: true, text: m[0] });
+      i = ANSI_RE.lastIndex;
+    } else {
+      tokens.push({ ansi: false, text: ansi[i] });
+      i++;
+    }
+  }
+
+  const chunks: string[] = [];
+  let buf = "";
+  let visible = 0;
+  // Varying target size gives a natural token-stream feel (~2–6 visible chars).
+  let target = 3 + Math.floor(Math.random() * 4);
+  for (const t of tokens) {
+    buf += t.text;
+    if (!t.ansi) visible++;
+    // Prefer to flush right after whitespace so chunks land on word boundaries.
+    const atBoundary = !t.ansi && /\s/.test(t.text);
+    if (visible >= target && (atBoundary || visible >= target + 3)) {
+      chunks.push(buf);
+      buf = "";
+      visible = 0;
+      target = 3 + Math.floor(Math.random() * 4);
+    }
+  }
+  if (buf) chunks.push(buf);
+  return chunks;
 }
 
-async function typewrite(text: string, perCharMs: number): Promise<void> {
-  for (const ch of text) {
-    process.stdout.write(ch);
-    // Newlines and spaces don't need full delay.
-    if (ch === "\n") {
-      await sleep(Math.min(perCharMs, 8));
-    } else if (ch === " ") {
-      await sleep(Math.max(1, Math.floor(perCharMs / 2)));
-    } else {
-      await sleep(perCharMs);
-    }
+async function streamAnsi(
+  ansi: string,
+  perVisibleCharMs: number,
+): Promise<void> {
+  const chunks = streamChunks(ansi);
+  for (const chunk of chunks) {
+    process.stdout.write(chunk);
+    const visible = chunk.replace(ANSI_RE, "").length;
+    await sleep(Math.max(1, Math.round(visible * perVisibleCharMs)));
   }
 }
 
 function renderUserBlock(text: string): string {
   const width = Math.max(40, Math.min(process.stdout.columns ?? 80, 100));
-  const inner = width - 4; // "│ " + " │"
-  const textWidth = inner - 2; // room for "> " / "  " prefix
+  const inner = width - 4;
+  const textWidth = inner - 2;
   const lines: string[] = [];
   for (const rawLine of text.split("\n")) {
     if (rawLine.length === 0) {
@@ -65,13 +101,13 @@ export async function play(
   events: PlayEvent[],
   opts: RenderOptions,
 ): Promise<void> {
-  const perChar = charDelayMs(opts.wpm);
+  // WPM → ms per visible character (assumes ~6 chars per word including space).
+  const perChar = Math.max(1, Math.round(10000 / opts.wpm));
 
   for (let i = 0; i < events.length; i++) {
     const e = events[i];
     const prev = events[i - 1];
 
-    // Spacing between events.
     if (prev) {
       if (prev.kind === "tool" && e.kind === "tool") {
         process.stdout.write("\n");
@@ -84,10 +120,10 @@ export async function play(
       process.stdout.write(renderUserBlock(e.text));
       await sleep(opts.turnDelayMs);
     } else if (e.kind === "assistant") {
-      await typewrite(e.text, perChar);
+      const ansi = renderMarkdown(e.text);
+      await streamAnsi(ansi, perChar);
       await sleep(opts.turnDelayMs);
     } else {
-      // tool indicator: "● ToolName"
       process.stdout.write(chalk.green("●") + " " + chalk.bold(e.name));
       await sleep(opts.toolDelayMs);
     }

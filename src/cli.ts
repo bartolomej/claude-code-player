@@ -10,7 +10,7 @@ function usage(): never {
       "Usage: ccplay <session-id> [options]",
       "",
       "Options:",
-      "  --wpm <n>           Typing speed in words per minute (default 600)",
+      "  --wpm <n>           Typing speed in words per minute (default 1500)",
       "  --turn-delay <ms>   Pause between turns (default 800)",
       "  --tool-delay <ms>   Pause after a tool indicator (default 400)",
       "  -h, --help          Show this help",
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   if (values.help || positionals.length !== 1) usage();
 
   const sessionId = positionals[0];
-  const wpm = values.wpm ? Number(values.wpm) : 600;
+  const wpm = values.wpm ? Number(values.wpm) : 1500;
   const turnDelayMs = values["turn-delay"] ? Number(values["turn-delay"]) : 800;
   const toolDelayMs = values["tool-delay"] ? Number(values["tool-delay"]) : 400;
 
