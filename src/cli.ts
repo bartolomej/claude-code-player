@@ -41,14 +41,14 @@ async function main(): Promise<void> {
 
   const path = await resolveSessionPath(sessionId);
   const lines = await readSessionLines(path);
-  const events = normalize(lines);
+  const { meta, events } = normalize(lines);
 
   if (events.length === 0) {
     process.stderr.write("No playable events found in this session.\n");
     process.exit(2);
   }
 
-  await play(events, { wpm, turnDelayMs, toolDelayMs });
+  await play(events, meta, { wpm, turnDelayMs, toolDelayMs });
 }
 
 main().catch((err) => {
