@@ -37,7 +37,7 @@ reading the same session JSONL Claude Code wrote.
 ## Install
 
 ```sh
-git clone https://github.com/OWNER/claude-code-player.git
+git clone https://github.com/bartolomej/claude-code-player.git
 cd claude-code-player
 npm install
 ```

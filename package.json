@@ -6,11 +6,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/claude-code-player.git"
+    "url": "git+https://github.com/bartolomej/claude-code-player.git"
   },
-  "homepage": "https://github.com/OWNER/claude-code-player#readme",
+  "homepage": "https://github.com/bartolomej/claude-code-player#readme",
   "bugs": {
-    "url": "https://github.com/OWNER/claude-code-player/issues"
+    "url": "https://github.com/bartolomej/claude-code-player/issues"
   },
   "keywords": [
     "claude",
