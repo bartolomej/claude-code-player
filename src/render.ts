@@ -7,12 +7,29 @@ export interface RenderOptions {
   wpm: number;
   turnDelayMs: number;
   toolDelayMs: number;
+  thinkMs: number;
 }
 
 // Claude Code-ish palette.
 const GREEN = chalk.hex("#5fa561"); // muted forest green
 const DIM = chalk.dim;
 const SPRITE = chalk.hex("#a97bd6"); // muted purple for the ✻
+const BRAND = chalk.hex("#d97757"); // Claude brand orange
+
+const SPINNER_FRAMES = ["✶", "✳", "✻", "✽", "✢", "·"];
+const THINKING_VERBS = [
+  "Thinking",
+  "Pondering",
+  "Cogitating",
+  "Mulling",
+  "Brewing",
+  "Weaving",
+  "Percolating",
+  "Simmering",
+  "Musing",
+  "Contemplating",
+  "Noodling",
+];
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -287,6 +304,29 @@ function streamChunks(ansi: string): string[] {
   return chunks;
 }
 
+async function runSpinner(verb: string, totalMs: number): Promise<void> {
+  if (totalMs <= 0) return;
+  const frameMs = 110;
+  const start = Date.now();
+  let i = 0;
+  const draw = () => {
+    const elapsed = ((Date.now() - start) / 1000).toFixed(0);
+    const glyph = BRAND(SPINNER_FRAMES[i % SPINNER_FRAMES.length]);
+    const suffix = DIM(`(${elapsed}s · esc to interrupt)`);
+    process.stdout.write(`\r\x1b[2K${glyph} ${chalk.bold(verb)}… ${suffix}`);
+    i++;
+  };
+  draw();
+  const timer = setInterval(draw, frameMs);
+  await sleep(totalMs);
+  clearInterval(timer);
+  process.stdout.write("\r\x1b[2K");
+}
+
+function pickVerb(): string {
+  return THINKING_VERBS[Math.floor(Math.random() * THINKING_VERBS.length)];
+}
+
 async function streamAnsi(ansi: string, perVisibleCharMs: number): Promise<void> {
   for (const chunk of streamChunks(ansi)) {
     process.stdout.write(chunk);
@@ -321,7 +361,17 @@ export async function play(
     if (e.kind === "user") {
       process.stdout.write(renderUser(e.text));
       await sleep(opts.turnDelayMs);
-    } else if (e.kind === "assistant") {
+      continue;
+    }
+
+    // Spinner before model output: full on a fresh turn, shorter after a tool.
+    if (prev?.kind === "user") {
+      await runSpinner(pickVerb(), opts.thinkMs);
+    } else if (prev?.kind === "tool") {
+      await runSpinner(pickVerb(), Math.round(opts.thinkMs / 2));
+    }
+
+    if (e.kind === "assistant") {
       const body = renderMarkdown(e.text);
       await streamAnsi(prefixAssistant(body), perChar);
       await sleep(opts.turnDelayMs);

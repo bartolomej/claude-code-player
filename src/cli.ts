@@ -13,6 +13,7 @@ function usage(): never {
       "  --wpm <n>           Typing speed in words per minute (default 1500)",
       "  --turn-delay <ms>   Pause between turns (default 800)",
       "  --tool-delay <ms>   Pause after a tool indicator (default 400)",
+      "  --think-ms <ms>     Thinking-spinner duration (default 1400, 0 disables)",
       "  -h, --help          Show this help",
       "",
     ].join("\n"),
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
       wpm: { type: "string" },
       "turn-delay": { type: "string" },
       "tool-delay": { type: "string" },
+      "think-ms": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -38,6 +40,7 @@ async function main(): Promise<void> {
   const wpm = values.wpm ? Number(values.wpm) : 1500;
   const turnDelayMs = values["turn-delay"] ? Number(values["turn-delay"]) : 800;
   const toolDelayMs = values["tool-delay"] ? Number(values["tool-delay"]) : 400;
+  const thinkMs = values["think-ms"] ? Number(values["think-ms"]) : 1400;
 
   const path = await resolveSessionPath(sessionId);
   const lines = await readSessionLines(path);
@@ -48,7 +51,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  await play(events, meta, { wpm, turnDelayMs, toolDelayMs });
+  await play(events, meta, { wpm, turnDelayMs, toolDelayMs, thinkMs });
 }
 
 main().catch((err) => {
