@@ -9,6 +9,11 @@ export interface RenderOptions {
   toolDelayMs: number;
 }
 
+// Claude Code-ish palette.
+const GREEN = chalk.hex("#5fa561"); // muted forest green
+const DIM = chalk.dim;
+const SPRITE = chalk.hex("#a97bd6"); // muted purple for the ✻
+
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -38,15 +43,14 @@ export function renderHeader(meta: SessionMeta): string {
   const model = friendlyModel(meta.model);
   const cwd = tildePath(meta.cwd);
   const version = meta.version ? `v${meta.version}` : "";
-  const line1 = chalk.bold("Claude Code") + (version ? " " + chalk.dim(version) : "");
+  const line1 = chalk.bold("Claude Code") + (version ? " " + DIM(version) : "");
   const line2 = [model, "Claude API"].filter(Boolean).join(" · ");
   const line3 = cwd ?? "";
-  const sprite = chalk.magenta("✻");
   const pad = "   ";
   return [
-    `${sprite} ${line1}`,
-    line2 ? `${pad}${chalk.dim(line2)}` : "",
-    line3 ? `${pad}${chalk.dim(line3)}` : "",
+    `${SPRITE("✻")} ${line1}`,
+    line2 ? `${pad}${DIM(line2)}` : "",
+    line3 ? `${pad}${DIM(line3)}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -59,16 +63,15 @@ function wrap(
   restPrefix: string,
 ): string {
   const out: string[] = [];
-  const paragraphs = text.split("\n");
-  let isFirstLineOfMessage = true;
-  for (const para of paragraphs) {
+  let firstLine = true;
+  for (const para of text.split("\n")) {
     if (para.length === 0) {
       out.push("");
       continue;
     }
     let remaining = para;
     while (remaining.length > 0) {
-      const prefix = isFirstLineOfMessage ? firstPrefix : restPrefix;
+      const prefix = firstLine ? firstPrefix : restPrefix;
       const budget = Math.max(1, width - prefix.length);
       if (remaining.length <= budget) {
         out.push(prefix + remaining);
@@ -79,20 +82,18 @@ function wrap(
         out.push(prefix + remaining.slice(0, cut));
         remaining = remaining.slice(cut).trimStart();
       }
-      isFirstLineOfMessage = false;
+      firstLine = false;
     }
   }
   return out.join("\n");
 }
 
 function renderUser(text: string): string {
-  const width = termWidth();
-  return chalk.gray(wrap(text, width, "> ", "  "));
+  return wrap(text, termWidth(), DIM("> "), "  ");
 }
 
 function prefixAssistant(body: string): string {
-  // Leading green bullet on first line; subsequent lines flush left.
-  const bullet = chalk.green("●") + " ";
+  const bullet = GREEN("●") + " ";
   const [first, ...rest] = body.split("\n");
   return bullet + (first ?? "") + (rest.length ? "\n" + rest.join("\n") : "");
 }
@@ -104,13 +105,10 @@ function truncate(s: string, max: number): string {
 }
 
 function formatToolArgs(name: string, input: Record<string, unknown>): string {
-  const width = termWidth();
-  const budget = Math.max(20, width - name.length - 6);
   const pick = (key: string): string | undefined => {
     const v = input[key];
     return typeof v === "string" ? v : undefined;
   };
-
   switch (name) {
     case "Bash":
       return pick("command") ?? "";
@@ -120,7 +118,6 @@ function formatToolArgs(name: string, input: Record<string, unknown>): string {
     case "NotebookEdit":
       return tildePath(pick("file_path") ?? pick("path")) ?? "";
     case "Grep":
-      return pick("pattern") ?? "";
     case "Glob":
       return pick("pattern") ?? "";
     case "Task":
@@ -130,13 +127,11 @@ function formatToolArgs(name: string, input: Record<string, unknown>): string {
       return pick("url") ?? "";
     case "WebSearch":
       return pick("query") ?? "";
-    default: {
-      // Generic: first string value.
+    default:
       for (const v of Object.values(input)) {
         if (typeof v === "string") return v;
       }
       return "";
-    }
   }
 }
 
@@ -145,9 +140,119 @@ function renderTool(name: string, input: Record<string, unknown>): string {
   const rawArgs = formatToolArgs(name, input);
   const argsMax = Math.max(20, width - name.length - 6);
   const args = rawArgs ? truncate(rawArgs, argsMax) : "";
-  const head = chalk.green("●") + " " + chalk.bold(name);
-  return args ? head + chalk.dim("(") + args + chalk.dim(")") : head;
+  const head = GREEN("●") + " " + chalk.bold(name);
+  return args ? head + DIM("(") + args + DIM(")") : head;
 }
+
+// --- AskUserQuestion flow --------------------------------------------------
+
+interface AskOption {
+  label: string;
+  description?: string;
+}
+interface AskQuestion {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: AskOption[];
+}
+
+function parseAskAnswers(resultText: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const re = /"([^"]+)"="([^"]*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(resultText))) {
+    map.set(m[1], m[2]);
+  }
+  return map;
+}
+
+function selectedIndices(options: AskOption[], answer: string | undefined): number[] {
+  if (!answer) return [];
+  const out: number[] = [];
+  for (let i = 0; i < options.length; i++) {
+    if (answer.includes(options[i].label)) out.push(i);
+  }
+  return out;
+}
+
+async function renderQuestionCard(
+  q: AskQuestion,
+  answer: string | undefined,
+): Promise<void> {
+  const width = termWidth();
+  const BAR = DIM("│");
+  const out = process.stdout;
+
+  // Header + question.
+  if (q.header) out.write(BAR + " " + chalk.bold(q.header) + "\n");
+  out.write(BAR + " " + q.question + "\n");
+  out.write(BAR + "\n");
+
+  // Options — remember marker-line offsets (0-based from first option line).
+  const markerOffsets: number[] = [];
+  let linesBelow = 0;
+  for (const opt of q.options) {
+    markerOffsets.push(linesBelow);
+    out.write(BAR + "   " + DIM("○") + " " + opt.label + "\n");
+    linesBelow++;
+    if (opt.description) {
+      const desc = truncate(opt.description, Math.max(20, width - 8));
+      out.write(BAR + "     " + DIM(desc) + "\n");
+      linesBelow++;
+    }
+  }
+
+  await sleep(550);
+
+  const selected = selectedIndices(q.options, answer);
+  for (const idx of selected) {
+    const offset = markerOffsets[idx];
+    const upBy = linesBelow - offset;
+    // Move up, clear line, rewrite with filled marker, return.
+    out.write(`\x1b[${upBy}A\r\x1b[2K`);
+    out.write(BAR + "   " + GREEN("●") + " " + chalk.bold(q.options[idx].label));
+    out.write(`\x1b[${upBy}B\r`);
+    await sleep(220);
+  }
+  await sleep(300);
+}
+
+function renderAskUserSummary(
+  questions: AskQuestion[],
+  answers: Map<string, string>,
+): string {
+  const lines: string[] = [];
+  const width = termWidth();
+  lines.push(GREEN("●") + " User answered Claude's questions:");
+  questions.forEach((q, i) => {
+    const a = answers.get(q.question);
+    if (!a) return;
+    const marker = i === 0 ? "  ⎿ · " : "    · ";
+    const cont = "      ";
+    const body = `${q.question} → ${a}`;
+    lines.push(wrap(body, width, DIM(marker), cont));
+  });
+  return lines.join("\n");
+}
+
+async function renderAskUser(
+  input: Record<string, unknown>,
+  resultText: string | undefined,
+): Promise<void> {
+  const questions = (input.questions as AskQuestion[] | undefined) ?? [];
+  const answers = parseAskAnswers(resultText ?? "");
+  for (let i = 0; i < questions.length; i++) {
+    if (i > 0) process.stdout.write("\n");
+    await renderQuestionCard(questions[i], answers.get(questions[i].question));
+  }
+  if (answers.size > 0) {
+    process.stdout.write("\n\n");
+    process.stdout.write(renderAskUserSummary(questions, answers));
+  }
+}
+
+// --- Streaming -------------------------------------------------------------
 
 function streamChunks(ansi: string): string[] {
   const tokens: { ansi: boolean; text: string }[] = [];
@@ -190,6 +295,8 @@ async function streamAnsi(ansi: string, perVisibleCharMs: number): Promise<void>
   }
 }
 
+// --- Main loop -------------------------------------------------------------
+
 export async function play(
   events: PlayEvent[],
   meta: SessionMeta,
@@ -217,6 +324,9 @@ export async function play(
     } else if (e.kind === "assistant") {
       const body = renderMarkdown(e.text);
       await streamAnsi(prefixAssistant(body), perChar);
+      await sleep(opts.turnDelayMs);
+    } else if (e.name === "AskUserQuestion") {
+      await renderAskUser(e.input, e.resultText);
       await sleep(opts.turnDelayMs);
     } else {
       process.stdout.write(renderTool(e.name, e.input));

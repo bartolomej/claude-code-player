@@ -1,7 +1,12 @@
 export type PlayEvent =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string }
-  | { kind: "tool"; name: string; input: Record<string, unknown> };
+  | {
+      kind: "tool";
+      name: string;
+      input: Record<string, unknown>;
+      resultText?: string;
+    };
 
 export interface SessionMeta {
   cwd?: string;
@@ -16,9 +21,12 @@ export interface NormalizedSession {
 
 type RawBlock = {
   type: string;
+  id?: string;
+  tool_use_id?: string;
   text?: string;
   name?: string;
   input?: Record<string, unknown>;
+  content?: unknown;
 };
 type RawEntry = {
   type?: string;
@@ -36,20 +44,50 @@ function isSlashCommandArtifact(s: string): boolean {
   return /^<(local-command-[a-z]+|command-[a-z]+)\b/i.test(s.trim());
 }
 
-export function normalize(rawEntries: unknown[]): NormalizedSession {
-  const events: PlayEvent[] = [];
-  const meta: SessionMeta = {};
+function extractResultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((c) => {
+        if (!c || typeof c !== "object") return "";
+        const obj = c as { type?: string; text?: string };
+        if (obj.type === "text" && typeof obj.text === "string") return obj.text;
+        return "";
+      })
+      .join("\n");
+  }
+  return "";
+}
 
+export function normalize(rawEntries: unknown[]): NormalizedSession {
+  const meta: SessionMeta = {};
+  const results = new Map<string, string>();
+
+  // Pass 1: collect tool results by tool_use_id and meta.
   for (const raw of rawEntries) {
     const entry = raw as RawEntry;
     if (!entry || typeof entry !== "object") continue;
-
     if (!meta.cwd && typeof entry.cwd === "string") meta.cwd = entry.cwd;
     if (!meta.version && typeof entry.version === "string")
       meta.version = entry.version;
     if (!meta.model && typeof entry.message?.model === "string")
       meta.model = entry.message.model;
 
+    if (entry.type !== "user") continue;
+    const content = entry.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type === "tool_result" && typeof block.tool_use_id === "string") {
+        results.set(block.tool_use_id, extractResultText(block.content));
+      }
+    }
+  }
+
+  // Pass 2: emit play events.
+  const events: PlayEvent[] = [];
+  for (const raw of rawEntries) {
+    const entry = raw as RawEntry;
+    if (!entry || typeof entry !== "object") continue;
     if (entry.type !== "user" && entry.type !== "assistant") continue;
     if (entry.isMeta) continue;
 
@@ -70,10 +108,13 @@ export function normalize(rawEntries: unknown[]): NormalizedSession {
         const text = block.text.trim();
         if (text) events.push({ kind: "assistant", text });
       } else if (block.type === "tool_use" && typeof block.name === "string") {
+        const resultText =
+          typeof block.id === "string" ? results.get(block.id) : undefined;
         events.push({
           kind: "tool",
           name: block.name,
           input: (block.input ?? {}) as Record<string, unknown>,
+          resultText,
         });
       }
     }
