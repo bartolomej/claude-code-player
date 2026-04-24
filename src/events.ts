@@ -6,7 +6,8 @@ export type PlayEvent =
       name: string;
       input: Record<string, unknown>;
       resultText?: string;
-    };
+    }
+  | { kind: "notification"; summary: string; status: string };
 
 export interface SessionMeta {
   cwd?: string;
@@ -45,6 +46,15 @@ type RawEntry = {
 
 function isSlashCommandArtifact(s: string): boolean {
   return /^<(local-command-[a-z]+|command-[a-z]+)\b/i.test(s.trim());
+}
+
+function parseTaskNotification(
+  s: string,
+): { summary: string; status: string } | null {
+  if (!/^<task-notification>/i.test(s.trim())) return null;
+  const summary = /<summary>([\s\S]*?)<\/summary>/i.exec(s)?.[1]?.trim() ?? "";
+  const status = /<status>([\s\S]*?)<\/status>/i.exec(s)?.[1]?.trim() ?? "";
+  return { summary, status };
 }
 
 function extractResultText(content: unknown): string {
@@ -102,6 +112,11 @@ export function normalize(rawEntries: unknown[]): NormalizedSession {
       if (typeof content !== "string") continue;
       const trimmed = content.trim();
       if (!trimmed || isSlashCommandArtifact(trimmed)) continue;
+      const notif = parseTaskNotification(trimmed);
+      if (notif) {
+        events.push({ kind: "notification", ...notif });
+        continue;
+      }
       events.push({ kind: "user", text: trimmed });
       continue;
     }

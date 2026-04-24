@@ -541,6 +541,16 @@ export async function play(
     const prev = events[i - 1];
     const next = events[i + 1];
 
+    if (e.kind === "notification") {
+      clearBox();
+      const icon = e.status === "completed" ? GREEN("✓") : DIM("•");
+      process.stdout.write(
+        "  " + DIM("⎿") + " " + icon + " " + DIM(e.summary) + "\n\n",
+      );
+      if (!next || next.kind === "user") drawBox();
+      continue;
+    }
+
     if (e.kind === "user") {
       if (!boxDrawn) drawBox();
       await sleep(350);
