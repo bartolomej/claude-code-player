@@ -38,15 +38,6 @@ const THINKING_VERBS = [
   "Noodling",
 ];
 
-// Input-box layout (5 lines tall):
-//   0: divider (with agent pill)
-//   1: blank
-//   2: prompt
-//   3: blank
-//   4: status bar
-const BOX_LINES = 5;
-const PROMPT_LINE_IDX = 2;
-
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -193,33 +184,61 @@ export function renderHeader(meta: SessionMeta): string {
 
 // --- Input box -------------------------------------------------------------
 
-function renderPromptLine(typed: string): string {
-  const width = termWidth();
-  const caret = chalk.bold("›");
-  const cursor = chalk.inverse(" ");
-  const maxLen = Math.max(10, width - 6);
-  const shown =
-    typed.length > maxLen ? "…" + typed.slice(-(maxLen - 1)) : typed;
-  return `${caret} ${shown}${cursor}`;
+function wrapPromptText(typed: string, firstBudget: number, contBudget: number): string[] {
+  // Hard-wrap by character so the cursor flows naturally as the user types.
+  if (typed.length === 0) return [""];
+  const lines: string[] = [];
+  let remaining = typed;
+  let budget = firstBudget;
+  while (remaining.length > budget) {
+    lines.push(remaining.slice(0, budget));
+    remaining = remaining.slice(budget);
+    budget = contBudget;
+  }
+  lines.push(remaining);
+  return lines;
 }
 
 function renderInputBoxLines(meta: SessionMeta, typed: string): string[] {
   const width = termWidth();
-  const agentTag = meta.agent ? ` ${meta.agent} ` : "";
-  const leftDash = "─".repeat(Math.max(1, width - agentTag.length));
+  const inner = Math.max(10, width - 4); // content width between "│ " and " │"
   const pillColor = meta.agentColor ?? "#d97757";
-  const divider =
-    DIM(leftDash) +
-    (agentTag ? chalk.bgHex(pillColor).hex("#1a1a1a")(agentTag) : "");
+  const border = chalk.hex(pillColor);
 
-  const prompt = renderPromptLine(typed);
+  const top = border("╭" + "─".repeat(width - 2) + "╮");
 
-  const leftRaw = "? for shortcuts";
-  const rightRaw = "◐ medium · /effort";
-  const gap = " ".repeat(Math.max(2, width - leftRaw.length - rightRaw.length));
-  const status = DIM(leftRaw) + gap + DIM(rightRaw);
+  // Content lines — prompt "› " on first line, 2-space indent on continuations.
+  // Reserve 1 extra column for the trailing cursor block so the rendered line
+  // never overflows `width` and triggers a terminal soft-wrap (which would
+  // desync our row count and leave ghost borders during redraws).
+  const textBudget = Math.max(1, inner - 3);
+  const wrapped = wrapPromptText(typed, textBudget, textBudget);
+  const contentLines: string[] = [];
+  for (let i = 0; i < wrapped.length; i++) {
+    const isLast = i === wrapped.length - 1;
+    const prefix = i === 0 ? chalk.bold("›") + " " : "  ";
+    const cursor = isLast ? chalk.inverse(" ") : "";
+    const body = prefix + wrapped[i] + cursor;
+    contentLines.push(border("│ ") + padRightVis(body, inner) + border(" │"));
+  }
 
-  return [divider, "", prompt, "", status];
+  // Bottom border with agent badge tucked into the right side.
+  const tag = meta.agent ? ` ${meta.agent} ` : "";
+  const tagStyled = tag ? chalk.bgHex(pillColor).hex("#1a1a1a")(tag) : "";
+  const dashBudget = width - 2 - visibleLen(tagStyled) - 1; // -1 for trailing "─"
+  const bottom =
+    border("╰" + "─".repeat(Math.max(1, dashBudget))) +
+    tagStyled +
+    border("─╯");
+
+  const statusLeft = DIM("? for shortcuts");
+  const statusRight = DIM("◐ medium · /effort");
+  const gap = " ".repeat(
+    Math.max(2, width - visibleLen(statusLeft) - visibleLen(statusRight)),
+  );
+  const status = statusLeft + gap + statusRight;
+
+  return [top, ...contentLines, bottom, "", status];
 }
 
 // --- Text helpers ----------------------------------------------------------
@@ -560,23 +579,37 @@ export async function play(
   }
 
   let boxDrawn = false;
+  let boxLines = 0;
 
+  // Walk up N lines, clearing each as we go. Cursor ends at col 0 of the
+  // topmost cleared line. After `drawBox` the cursor sits one line below the
+  // last rendered line (trailing "\n"), so pass `boxLines` to land on the top
+  // border row ready for a rewrite.
+  const clearLinesAbove = (n: number) => {
+    for (let k = 0; k < n; k++) {
+      process.stdout.write("\x1b[1A\x1b[2K");
+    }
+    process.stdout.write("\r");
+  };
   const drawBox = (typed = "") => {
     const lines = renderInputBoxLines(meta, typed);
     for (const l of lines) process.stdout.write(l + "\n");
+    boxLines = lines.length;
     boxDrawn = true;
   };
   const clearBox = () => {
     if (!boxDrawn) return;
-    process.stdout.write(`\x1b[${BOX_LINES}A\r\x1b[0J`);
+    clearLinesAbove(boxLines);
     boxDrawn = false;
+    boxLines = 0;
   };
   const updatePrompt = (typed: string) => {
     if (!boxDrawn) return;
-    const up = BOX_LINES - PROMPT_LINE_IDX;
-    process.stdout.write(
-      `\x1b[${up}A\r\x1b[2K${renderPromptLine(typed)}\x1b[${up}B\r`,
-    );
+    // Re-render the whole box — height varies as text wraps onto new lines.
+    clearLinesAbove(boxLines);
+    const lines = renderInputBoxLines(meta, typed);
+    for (const l of lines) process.stdout.write(l + "\n");
+    boxLines = lines.length;
   };
 
   process.stdout.write(renderHeader(meta) + "\n\n");

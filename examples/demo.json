@@ -11,6 +11,12 @@
     "toolDelayMs": 400,
     "thinkMs": 1400
   },
+  "tools": {
+    "dim": true,
+    "runThreshold": 3,
+    "runToolDelayMs": 80,
+    "runSkipSpinner": true
+  },
   "filters": {
     "excludeUser": [
       "^skip$",
