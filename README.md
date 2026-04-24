@@ -46,7 +46,7 @@ npm install
 
 ```sh
 # Ad-hoc: replay a session by its UUID
-npm run dev -- c5c2ab62-fa0d-4710-8d6d-eaa17cd22f8b
+npm run dev -- 00000000-0000-0000-0000-000000000000
 
 # Or point at a config file
 npm run dev -- examples/demo.json
@@ -71,10 +71,10 @@ find recent session IDs by listing that directory.
    ```jsonc
    {
      // Required — the session you want to replay
-     "sessionId": "c5c2ab62-fa0d-4710-8d6d-eaa17cd22f8b",
+     "sessionId": "00000000-0000-0000-0000-000000000000",
 
      // Greeting name in the welcome box. Defaults to $USER.
-     "user": "Pete",
+     "user": "John",
 
      // Agent label shown in the bottom pill
      "agent": {
