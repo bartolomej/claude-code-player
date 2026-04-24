@@ -12,6 +12,7 @@ export interface SessionMeta {
   cwd?: string;
   model?: string;
   version?: string;
+  agent?: string;
 }
 
 export interface NormalizedSession {
@@ -33,6 +34,7 @@ type RawEntry = {
   isMeta?: boolean;
   cwd?: string;
   version?: string;
+  agentSetting?: string;
   message?: {
     role?: string;
     model?: string;
@@ -72,6 +74,8 @@ export function normalize(rawEntries: unknown[]): NormalizedSession {
       meta.version = entry.version;
     if (!meta.model && typeof entry.message?.model === "string")
       meta.model = entry.message.model;
+    if (!meta.agent && typeof entry.agentSetting === "string")
+      meta.agent = entry.agentSetting;
 
     if (entry.type !== "user") continue;
     const content = entry.message?.content;

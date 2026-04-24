@@ -10,10 +10,11 @@ function usage(): never {
       "Usage: ccplay <session-id> [options]",
       "",
       "Options:",
-      "  --wpm <n>           Typing speed in words per minute (default 1500)",
+      "  --wpm <n>           Typing speed in words per minute (default 3500)",
       "  --turn-delay <ms>   Pause between turns (default 800)",
       "  --tool-delay <ms>   Pause after a tool indicator (default 400)",
       "  --think-ms <ms>     Thinking-spinner duration (default 1400, 0 disables)",
+      "  --agent <name>      Override/force the agent label (default: read from session)",
       "  -h, --help          Show this help",
       "",
     ].join("\n"),
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
       "turn-delay": { type: "string" },
       "tool-delay": { type: "string" },
       "think-ms": { type: "string" },
+      agent: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -37,7 +39,7 @@ async function main(): Promise<void> {
   if (values.help || positionals.length !== 1) usage();
 
   const sessionId = positionals[0];
-  const wpm = values.wpm ? Number(values.wpm) : 1500;
+  const wpm = values.wpm ? Number(values.wpm) : 3500;
   const turnDelayMs = values["turn-delay"] ? Number(values["turn-delay"]) : 800;
   const toolDelayMs = values["tool-delay"] ? Number(values["tool-delay"]) : 400;
   const thinkMs = values["think-ms"] ? Number(values["think-ms"]) : 1400;
@@ -45,6 +47,7 @@ async function main(): Promise<void> {
   const path = await resolveSessionPath(sessionId);
   const lines = await readSessionLines(path);
   const { meta, events } = normalize(lines);
+  if (values.agent) meta.agent = values.agent;
 
   if (events.length === 0) {
     process.stderr.write("No playable events found in this session.\n");

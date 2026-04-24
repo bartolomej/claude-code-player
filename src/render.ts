@@ -56,21 +56,71 @@ function friendlyModel(model?: string): string | undefined {
   return model;
 }
 
+const ROBOT = [
+  " ▟▀▀▀▀▀▙ ",
+  " ▌ ◉ ◉ ▐ ",
+  " ▌  ─  ▐ ",
+  " ▜▄▄▄▄▄▛ ",
+];
+
 export function renderHeader(meta: SessionMeta): string {
+  const width = Math.min(termWidth(), 90);
+  const version = meta.version ? `v${meta.version}` : "";
+  const title = ` Claude Code${version ? " " + version : ""} `;
   const model = friendlyModel(meta.model);
   const cwd = tildePath(meta.cwd);
-  const version = meta.version ? `v${meta.version}` : "";
-  const line1 = chalk.bold("Claude Code") + (version ? " " + DIM(version) : "");
-  const line2 = [model, "Claude API"].filter(Boolean).join(" · ");
-  const line3 = cwd ?? "";
-  const pad = "   ";
-  return [
-    `${SPRITE("✻")} ${line1}`,
-    line2 ? `${pad}${DIM(line2)}` : "",
-    line3 ? `${pad}${DIM(line3)}` : "",
-  ]
-    .filter(Boolean)
+
+  const top = "╭─" + title + "─".repeat(Math.max(1, width - title.length - 3)) + "╮";
+  const bottom = "╰" + "─".repeat(width - 2) + "╯";
+
+  const robotW = ROBOT[0].length;
+  const infoLines: string[] = ["", "Welcome back!", ""];
+  if (model) infoLines.push(`${model} · Claude API`);
+  const locParts: string[] = [];
+  if (meta.agent) locParts.push(`@${meta.agent}`);
+  if (cwd) locParts.push(cwd);
+  if (locParts.length) infoLines.push(locParts.join(" · "));
+  infoLines.push("");
+
+  // Pad robot and info to equal height.
+  const rows = Math.max(ROBOT.length, infoLines.length);
+  const paddedRobot = [...ROBOT];
+  while (paddedRobot.length < rows) paddedRobot.push(" ".repeat(robotW));
+  const paddedInfo = [...infoLines];
+  while (paddedInfo.length < rows) paddedInfo.push("");
+  // Top/bottom pad by one blank row inside the box.
+  paddedRobot.unshift(" ".repeat(robotW));
+  paddedRobot.push(" ".repeat(robotW));
+  paddedInfo.unshift("");
+  paddedInfo.push("");
+
+  const infoW = width - 2 - robotW - 3; // box sides + robot + " | "
+  const body = paddedRobot
+    .map((r, i) => {
+      const info = (paddedInfo[i] ?? "").padEnd(infoW, " ").slice(0, infoW);
+      const infoStyled = i === 2 && info.trim() === "Welcome back!"
+        ? chalk.bold(info.trimEnd()) + " ".repeat(info.length - info.trimEnd().length)
+        : DIM(info);
+      return "│" + BRAND(r) + " " + infoStyled + " │";
+    })
     .join("\n");
+
+  return [chalk.dim(top), body, chalk.dim(bottom)].join("\n");
+}
+
+function renderInputBar(meta: SessionMeta): string {
+  const width = termWidth();
+  const agentTag = meta.agent ? ` ${meta.agent} ` : "";
+  const leftDash = "─".repeat(Math.max(1, width - agentTag.length - 1));
+  const divider = DIM(leftDash) + (agentTag ? chalk.bgHex("#d97757").black(agentTag) : "");
+
+  const prompt = DIM("›") + " " + chalk.inverse(" ");
+  const left = DIM("? for shortcuts");
+  const right = DIM("◐ medium · /effort");
+  const gap = " ".repeat(Math.max(2, width - left.length - right.length));
+  const status = left + gap + right;
+
+  return ["", divider, "", prompt, "", status].join("\n");
 }
 
 function wrap(
@@ -308,11 +358,18 @@ async function runSpinner(verb: string, totalMs: number): Promise<void> {
   if (totalMs <= 0) return;
   const frameMs = 110;
   const start = Date.now();
+  // Fake token counter that grows while "thinking" — pure demo flavor.
+  const tokensPerSec = 60 + Math.floor(Math.random() * 40);
   let i = 0;
   const draw = () => {
-    const elapsed = ((Date.now() - start) / 1000).toFixed(0);
+    const elapsedSec = (Date.now() - start) / 1000;
+    const tokens = Math.floor(elapsedSec * tokensPerSec);
+    const tokStr =
+      tokens >= 1000
+        ? (tokens / 1000).toFixed(1) + "k"
+        : tokens.toString();
     const glyph = BRAND(SPINNER_FRAMES[i % SPINNER_FRAMES.length]);
-    const suffix = DIM(`(${elapsed}s · esc to interrupt)`);
+    const suffix = DIM(`(${elapsedSec.toFixed(0)}s · ↑ ${tokStr} tokens)`);
     process.stdout.write(`\r\x1b[2K${glyph} ${chalk.bold(verb)}… ${suffix}`);
     i++;
   };
@@ -344,7 +401,7 @@ export async function play(
 ): Promise<void> {
   const perChar = Math.max(1, Math.round(10000 / opts.wpm));
 
-  process.stdout.write(renderHeader(meta) + "\n\n");
+  process.stdout.write(renderHeader(meta) + "\n");
 
   for (let i = 0; i < events.length; i++) {
     const e = events[i];
@@ -383,5 +440,6 @@ export async function play(
       await sleep(opts.toolDelayMs);
     }
   }
-  process.stdout.write("\n");
+  process.stdout.write("\n\n");
+  process.stdout.write(renderInputBar(meta) + "\n");
 }
