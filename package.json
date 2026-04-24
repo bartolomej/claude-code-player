@@ -1,0 +1,25 @@
+{
+  "name": "claude-code-player",
+  "version": "0.1.0",
+  "description": "Replay a Claude Code session as a demo-friendly TUI.",
+  "type": "module",
+  "bin": {
+    "ccplay": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/cli.ts",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
