@@ -33,6 +33,7 @@ async function typewrite(text: string, perCharMs: number): Promise<void> {
 function renderUserBlock(text: string): string {
   const width = Math.max(40, Math.min(process.stdout.columns ?? 80, 100));
   const inner = width - 4; // "│ " + " │"
+  const textWidth = inner - 2; // room for "> " / "  " prefix
   const lines: string[] = [];
   for (const rawLine of text.split("\n")) {
     if (rawLine.length === 0) {
@@ -40,9 +41,9 @@ function renderUserBlock(text: string): string {
       continue;
     }
     let remaining = rawLine;
-    while (remaining.length > inner) {
-      let cut = remaining.lastIndexOf(" ", inner);
-      if (cut <= 0) cut = inner;
+    while (remaining.length > textWidth) {
+      let cut = remaining.lastIndexOf(" ", textWidth);
+      if (cut <= 0) cut = textWidth;
       lines.push(remaining.slice(0, cut));
       remaining = remaining.slice(cut).trimStart();
     }
