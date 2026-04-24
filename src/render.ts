@@ -9,6 +9,12 @@ export interface RenderOptions {
   turnDelayMs: number;
   toolDelayMs: number;
   thinkMs: number;
+  tools?: {
+    dim?: boolean;
+    runThreshold?: number;
+    runToolDelayMs?: number;
+    runSkipSpinner?: boolean;
+  };
 }
 
 // Claude Code-ish palette.
@@ -297,13 +303,21 @@ function formatToolArgs(name: string, input: Record<string, unknown>): string {
   }
 }
 
-function renderTool(name: string, input: Record<string, unknown>): string {
+function renderTool(
+  name: string,
+  input: Record<string, unknown>,
+  dim = false,
+): string {
   const width = termWidth();
   const rawArgs = formatToolArgs(name, input);
   const argsMax = Math.max(20, width - name.length - 6);
   const args = rawArgs ? truncate(rawArgs, argsMax) : "";
-  const head = GREEN("●") + " " + chalk.bold(name);
-  return args ? head + DIM("(") + args + DIM(")") : head;
+  const bullet = dim ? DIM("●") : GREEN("●");
+  const nameStyled = dim ? DIM(name) : chalk.bold(name);
+  const head = bullet + " " + nameStyled;
+  if (!args) return head;
+  const argsStyled = dim ? DIM(args) : args;
+  return head + DIM("(") + argsStyled + DIM(")");
 }
 
 // --- AskUserQuestion flow --------------------------------------------------
@@ -525,6 +539,26 @@ export async function play(
   opts: RenderOptions,
 ): Promise<void> {
   const perChar = Math.max(1, Math.round(10000 / opts.wpm));
+  const toolsOpt = opts.tools ?? {};
+  const dimTools = toolsOpt.dim === true;
+  const runThreshold = toolsOpt.runThreshold ?? 3;
+  const runToolDelayMs = toolsOpt.runToolDelayMs ?? 80;
+  const runSkipSpinner = toolsOpt.runSkipSpinner !== false;
+
+  // Mark events that sit inside a run of ≥ runThreshold consecutive tools.
+  const inToolRun = new Array<boolean>(events.length).fill(false);
+  if (runThreshold > 0) {
+    let i = 0;
+    while (i < events.length) {
+      let j = i;
+      while (j < events.length && events[j].kind === "tool") j++;
+      if (j - i >= runThreshold) {
+        for (let k = i; k < j; k++) inToolRun[k] = true;
+      }
+      i = j === i ? i + 1 : j;
+    }
+  }
+
   let boxDrawn = false;
 
   const drawBox = (typed = "") => {
@@ -583,9 +617,15 @@ export async function play(
     // Non-user: clear box, render content, maybe redraw box at end.
     clearBox();
 
+    const chainedInRun =
+      e.kind === "tool" &&
+      prev?.kind === "tool" &&
+      inToolRun[i] &&
+      inToolRun[i - 1];
+
     if (prev?.kind === "user") {
       await runSpinner(pickVerb(), opts.thinkMs);
-    } else if (prev?.kind === "tool") {
+    } else if (prev?.kind === "tool" && !(chainedInRun && runSkipSpinner)) {
       await runSpinner(pickVerb(), Math.round(opts.thinkMs / 2));
     }
 
@@ -594,7 +634,7 @@ export async function play(
     } else if (e.name === "AskUserQuestion") {
       await renderAskUser(e.input, e.resultText);
     } else {
-      process.stdout.write(renderTool(e.name, e.input));
+      process.stdout.write(renderTool(e.name, e.input, dimTools));
     }
 
     // Spacing, then only redraw box if the next event will want the box
@@ -605,7 +645,12 @@ export async function play(
     } else if (next.kind === "tool" && e.kind === "tool") {
       // Chained tools: a touch of extra spacing already handled above.
     }
-    await sleep(opts.toolDelayMs);
+    const inRunGap =
+      e.kind === "tool" &&
+      next?.kind === "tool" &&
+      inToolRun[i] &&
+      inToolRun[i + 1];
+    await sleep(inRunGap ? runToolDelayMs : opts.toolDelayMs);
   }
 
   if (!boxDrawn) drawBox();

@@ -22,6 +22,17 @@ export interface PlayerConfig {
     toolDelayMs?: number;
     thinkMs?: number;
   };
+  tools?: {
+    /** Render tool bullet/name/args dimmed so they don't outshine messages. */
+    dim?: boolean;
+    /** Consecutive tool events ≥ this count are treated as a "run" and
+     *  sped up. 0 disables the speedup (default 3). */
+    runThreshold?: number;
+    /** Delay between tools within a run (default 80ms, overrides toolDelayMs). */
+    runToolDelayMs?: number;
+    /** Skip the inter-tool thinking spinner within a run (default true). */
+    runSkipSpinner?: boolean;
+  };
   filters?: EventFilters;
 }
 

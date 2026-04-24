@@ -83,7 +83,13 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  await play(events, meta, { wpm, turnDelayMs, toolDelayMs, thinkMs });
+  await play(events, meta, {
+    wpm,
+    turnDelayMs,
+    toolDelayMs,
+    thinkMs,
+    tools: config.tools,
+  });
 }
 
 main().catch((err) => {
