@@ -2,7 +2,24 @@
   "name": "claude-code-player",
   "version": "0.1.0",
   "description": "Replay a Claude Code session as a demo-friendly TUI.",
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/claude-code-player.git"
+  },
+  "homepage": "https://github.com/OWNER/claude-code-player#readme",
+  "bugs": {
+    "url": "https://github.com/OWNER/claude-code-player/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "tui",
+    "demo",
+    "replay",
+    "terminal"
+  ],
   "bin": {
     "ccplay": "./dist/cli.js"
   },

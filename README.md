@@ -37,7 +37,7 @@ reading the same session JSONL Claude Code wrote.
 ## Install
 
 ```sh
-git clone <this repo>
+git clone https://github.com/OWNER/claude-code-player.git
 cd claude-code-player
 npm install
 ```
@@ -168,6 +168,10 @@ CLI flags override config values, which override defaults.
   agent was actually running.
 - **Want to hide a noisy tool?** Add it to `filters.excludeTools` (e.g.
   `["Bash"]`) to suppress every `● Bash(…)` line.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
 
 ## What's supported
 
