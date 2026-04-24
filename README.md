@@ -1,12 +1,5 @@
-# claude-code-player
+<img width="672" height="214" alt="Screenshot 2026-04-24 at 15 56 13" src="https://github.com/user-attachments/assets/2490fac9-e18e-4a18-90ce-b7a1e7162e4a" />
 
-Replay a Claude Code session as a demo-friendly TUI.
-
-Point it at a session ID (or a config file) and it re-emits the conversation
-with Claude Code's look — welcome box, typewriter streaming, thinking
-spinner, tool-call indicators, AskUserQuestion flows, agent pill, the whole
-thing. Built for recording demos of long agent runs without sitting through
-hours of real time.
 
 ## Why this exists
 
