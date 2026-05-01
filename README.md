@@ -6,26 +6,15 @@
 Recording a compelling Claude Code demo is surprisingly hard when the agent
 actually does real work:
 
-- **Real sessions are long.** A useful agent run — the kind you'd want to
-  show a customer or teammate — takes anywhere from 20 minutes to several
-  hours. Screen-recording that is impractical. You end up with a
-  multi-gigabyte file and a demo nobody will sit through.
+- **Real sessions are long.** Long-horizon agent sessions can take hours. Screen-recording that in one-shot is difficult.
 - **Editing is worse.** Trimming a terminal recording into a tight 60-second
   clip means cutting dead time, splicing streams, and hiding the ugly bits
-  (credential prompts, permission approvals, tools running for 8 minutes,
-  failed tool calls, "continue", "try again"). You lose the authentic look
-  the moment you touch it in a video editor.
+  (credential prompts, permission approvals, long-running tools,...).
 - **Re-running isn't an option.** You can't just "do the demo again" —
   agents are non-deterministic, the tool outputs differ, and the exact turn
   you nailed the first time is gone.
-- **Faking it looks fake.** Hand-crafted fake terminal recordings read as
+- **Mocking it looks fake.** Hand-crafted fake terminal recordings read as
   marketing. Viewers can tell.
-
-This tool replays an existing, real session — the one your agent actually
-ran — but at demo pace, in a single clean terminal buffer, with plumbing
-turns filtered out. You record the replay once, top to bottom, in a window
-the size you want. The result looks exactly like Claude Code because it's
-reading the same session JSONL Claude Code wrote.
 
 ## Install
 
