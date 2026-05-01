@@ -25,6 +25,7 @@
       "^try again",
       "^keep going"
     ],
-    "excludeTools": []
+    "excludeTools": [],
+    "excludeToolInput": []
   }
 }

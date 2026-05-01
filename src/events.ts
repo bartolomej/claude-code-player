@@ -79,6 +79,7 @@ export interface EventFilters {
   excludeUser?: string[];
   excludeAssistant?: string[];
   excludeTools?: string[];
+  excludeToolInput?: string[];
 }
 
 function compilePatterns(pats?: string[]): RegExp[] | undefined {
@@ -98,6 +99,7 @@ export function normalize(
   const excludeUser = compilePatterns(filters?.excludeUser);
   const excludeAssistant = compilePatterns(filters?.excludeAssistant);
   const excludeTools = new Set(filters?.excludeTools ?? []);
+  const excludeToolInput = compilePatterns(filters?.excludeToolInput);
   const meta: SessionMeta = {};
   const results = new Map<string, string>();
 
@@ -162,6 +164,7 @@ export function normalize(
         events.push({ kind: "assistant", text });
       } else if (block.type === "tool_use" && typeof block.name === "string") {
         if (excludeTools.has(block.name)) continue;
+        if (excludeToolInput && matchesAny(JSON.stringify(block.input), excludeToolInput)) continue;
         const resultText =
           typeof block.id === "string" ? results.get(block.id) : undefined;
         events.push({

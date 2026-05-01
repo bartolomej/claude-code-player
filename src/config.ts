@@ -7,6 +7,9 @@ export interface EventFilters {
   excludeAssistant?: string[];
   /** Tool names to drop entirely, e.g. `["Bash"]`. */
   excludeTools?: string[];
+  /** Regex patterns (case-insensitive) tested against stringified tool input.
+   *  Matches drop the individual tool event. */
+  excludeToolInput?: string[];
 }
 
 export interface PlayerConfig {

@@ -69,7 +69,21 @@ for a full example.
   true) skips the inter-tool spinner within a run.
 - **`filters`** — drop plumbing turns. `excludeUser` and `excludeAssistant`
   take case-insensitive regexes; `excludeTools` takes exact tool names
-  (e.g. `["Bash"]`).
+  (e.g. `["Bash"]`); `excludeToolInput` takes case-insensitive regexes
+  tested against stringified tool input to drop specific tool instances
+  (e.g. `["Credit balance is depleted"]`).
+
+## Generating configs with Claude
+
+A bundled Claude Code subagent can inspect a session and generate a config
+for you, filtering out noisy parts automatically:
+
+```sh
+claude -a make-config "00000000-0000-0000-0000-000000000000"
+
+# With guidance
+claude -a make-config "00000000-... — skip credential setup, user=Bart, color=teal"
+```
 
 ## Tips
 
@@ -87,7 +101,8 @@ for a full example.
 - Markdown rendering: headings, bold/italic, inline code, lists, code
   blocks, tables
 - Tool indicators with inline primary arg (`Bash(cmd)`, `Read(path)`, …)
-- AskUserQuestion form cards with animated option selection
+- AskUserQuestion form cards with animated option selection and free-text
+  answer rendering
 - Task-notification XML collapsed to a single `✓` notice
 - Thinking spinner with rotating verb + fake token counter
 - Persistent bottom input box with animated user typing / submit

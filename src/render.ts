@@ -352,12 +352,35 @@ interface AskQuestion {
   options: AskOption[];
 }
 
-function parseAskAnswers(resultText: string): Map<string, string> {
+function parseAskAnswers(
+  resultText: string,
+  questions: AskQuestion[],
+): Map<string, string> {
   const map = new Map<string, string>();
-  const re = /"([^"]+)"="([^"]*)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(resultText))) {
-    map.set(m[1], m[2]);
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i].question;
+    const needle = `"${q}"="`;
+    const start = resultText.indexOf(needle);
+    if (start === -1) continue;
+    const valStart = start + needle.length;
+    // Find the end: either the next known question's `"question"="` or the
+    // trailing `". You can now continue` / end of string. Strip the closing `"`.
+    let valEnd = resultText.length;
+    for (let j = i + 1; j < questions.length; j++) {
+      const nextNeedle = `"${questions[j].question}"="`;
+      const nextPos = resultText.indexOf(nextNeedle, valStart);
+      if (nextPos !== -1) {
+        valEnd = nextPos;
+        break;
+      }
+    }
+    let answer = resultText.slice(valStart, valEnd).trimEnd();
+    // Strip trailing separator: `". You can now continue...` or just `".`
+    answer = answer.replace(/"\.\s*You can now continue.*$/s, "");
+    answer = answer.replace(/"\.\s*$/, "");
+    // Strip a single trailing quote if present
+    if (answer.endsWith('"')) answer = answer.slice(0, -1);
+    map.set(q, answer);
   }
   return map;
 }
@@ -406,6 +429,7 @@ async function renderQuestionCard(
   // Built-in trailing items that always appear in Claude Code's picker.
   const typeNum = q.options.length + 1;
   const chatNum = q.options.length + 2;
+  const typeLineOffset = linesBelow;
   out.write(`  ${typeNum}. Type something.\n`);
   linesBelow++;
   out.write(DIM("─".repeat(Math.min(width, 60))) + "\n");
@@ -422,15 +446,25 @@ async function renderQuestionCard(
   await sleep(600);
 
   const selected = selectedIndices(q.options, answer);
-  for (const idx of selected) {
-    const offset = labelLineOffsets[idx];
-    const upBy = linesBelow - offset;
+  if (selected.length === 0 && answer) {
+    // Free-text answer — highlight "Type something" and show the typed text
+    // below the card (cursor math can't expand a single line to multiple).
+    const upBy = linesBelow - typeLineOffset;
     out.write(`\x1b[${upBy}A\r\x1b[2K`);
-    out.write(
-      `${ASK_BLUE("›")} ${idx + 1}. ${ASK_BLUE(q.options[idx].label)}`,
-    );
+    out.write(`${ASK_BLUE("›")} ${typeNum}. ${ASK_BLUE("Type something.")}`);
     out.write(`\x1b[${upBy}B\r`);
-    await sleep(240);
+    out.write("\n" + wrap(ASK_BLUE(answer), width, "  ", "  ") + "\n");
+  } else {
+    for (const idx of selected) {
+      const offset = labelLineOffsets[idx];
+      const upBy = linesBelow - offset;
+      out.write(`\x1b[${upBy}A\r\x1b[2K`);
+      out.write(
+        `${ASK_BLUE("›")} ${idx + 1}. ${ASK_BLUE(q.options[idx].label)}`,
+      );
+      out.write(`\x1b[${upBy}B\r`);
+      await sleep(240);
+    }
   }
   await sleep(350);
 }
@@ -458,7 +492,7 @@ async function renderAskUser(
   resultText: string | undefined,
 ): Promise<void> {
   const questions = (input.questions as AskQuestion[] | undefined) ?? [];
-  const answers = parseAskAnswers(resultText ?? "");
+  const answers = parseAskAnswers(resultText ?? "", questions);
   for (let i = 0; i < questions.length; i++) {
     if (i > 0) process.stdout.write("\n");
     await renderQuestionCard(questions[i], answers.get(questions[i].question));
