@@ -80,6 +80,8 @@ export interface EventFilters {
   excludeAssistant?: string[];
   excludeTools?: string[];
   excludeToolInput?: string[];
+  excludeNotifications?: string[];
+  stopAfterAssistant?: string;
 }
 
 function compilePatterns(pats?: string[]): RegExp[] | undefined {
@@ -100,6 +102,10 @@ export function normalize(
   const excludeAssistant = compilePatterns(filters?.excludeAssistant);
   const excludeTools = new Set(filters?.excludeTools ?? []);
   const excludeToolInput = compilePatterns(filters?.excludeToolInput);
+  const excludeNotifications = compilePatterns(filters?.excludeNotifications);
+  const stopAfter = filters?.stopAfterAssistant
+    ? new RegExp(filters.stopAfterAssistant, "i")
+    : undefined;
   const meta: SessionMeta = {};
   const results = new Map<string, string>();
 
@@ -132,7 +138,9 @@ export function normalize(
 
   // Pass 2: emit play events.
   const events: PlayEvent[] = [];
+  let stopped = false;
   for (const raw of rawEntries) {
+    if (stopped) break;
     const entry = raw as RawEntry;
     if (!entry || typeof entry !== "object") continue;
     if (entry.type !== "user" && entry.type !== "assistant") continue;
@@ -146,6 +154,8 @@ export function normalize(
       if (!trimmed || isSlashCommandArtifact(trimmed)) continue;
       const notif = parseTaskNotification(trimmed);
       if (notif) {
+        const notifText = `${notif.summary} ${notif.status}`;
+        if (matchesAny(notifText, excludeNotifications)) continue;
         events.push({ kind: "notification", ...notif });
         continue;
       }
@@ -156,12 +166,17 @@ export function normalize(
 
     if (!Array.isArray(content)) continue;
     for (const block of content) {
+      if (stopped) break;
       if (!block || typeof block !== "object") continue;
       if (block.type === "text" && typeof block.text === "string") {
         const text = block.text.trim();
         if (!text) continue;
         if (matchesAny(text, excludeAssistant)) continue;
         events.push({ kind: "assistant", text });
+        if (stopAfter?.test(text)) {
+          stopped = true;
+          break;
+        }
       } else if (block.type === "tool_use" && typeof block.name === "string") {
         if (excludeTools.has(block.name)) continue;
         if (excludeToolInput && matchesAny(JSON.stringify(block.input), excludeToolInput)) continue;

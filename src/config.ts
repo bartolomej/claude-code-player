@@ -10,6 +10,11 @@ export interface EventFilters {
   /** Regex patterns (case-insensitive) tested against stringified tool input.
    *  Matches drop the individual tool event. */
   excludeToolInput?: string[];
+  /** Regex patterns (case-insensitive) tested against notification summary/status. */
+  excludeNotifications?: string[];
+  /** Regex pattern tested against assistant text; stops the session after
+   *  the first matching message (inclusive). */
+  stopAfterAssistant?: string;
 }
 
 export interface PlayerConfig {
