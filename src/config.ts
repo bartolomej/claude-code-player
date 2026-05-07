@@ -35,6 +35,9 @@ export interface PlayerConfig {
     runToolDelayMs?: number;
     /** Skip the inter-tool thinking spinner within a run (default true). */
     runSkipSpinner?: boolean;
+    /** Inside a tool run, show at most this many tools then collapse the rest
+     *  into a "+N tools" line.  0 disables collapsing (default 0). */
+    collapseThreshold?: number;
   };
   filters?: EventFilters;
 }

@@ -14,6 +14,7 @@ export interface RenderOptions {
     runThreshold?: number;
     runToolDelayMs?: number;
     runSkipSpinner?: boolean;
+    collapseThreshold?: number;
   };
 }
 
@@ -597,6 +598,7 @@ export async function play(
   const runThreshold = toolsOpt.runThreshold ?? 3;
   const runToolDelayMs = toolsOpt.runToolDelayMs ?? 80;
   const runSkipSpinner = toolsOpt.runSkipSpinner !== false;
+  const collapseThreshold = toolsOpt.collapseThreshold ?? 0;
 
   // Mark events that sit inside a run of ≥ runThreshold consecutive tools.
   const inToolRun = new Array<boolean>(events.length).fill(false);
@@ -609,6 +611,25 @@ export async function play(
         for (let k = i; k < j; k++) inToolRun[k] = true;
       }
       i = j === i ? i + 1 : j;
+    }
+  }
+
+  // For each tool run, compute position-within-run so we can collapse.
+  // runPos[i] = 0-based index within the current consecutive tool group.
+  // runLen[i] = total length of the group.
+  const runPos = new Array<number>(events.length).fill(0);
+  const runLen = new Array<number>(events.length).fill(0);
+  {
+    let i = 0;
+    while (i < events.length) {
+      if (events[i].kind !== "tool") { i++; continue; }
+      let j = i;
+      while (j < events.length && events[j].kind === "tool") j++;
+      for (let k = i; k < j; k++) {
+        runPos[k] = k - i;
+        runLen[k] = j - i;
+      }
+      i = j;
     }
   }
 
@@ -689,6 +710,32 @@ export async function play(
       prev?.kind === "tool" &&
       inToolRun[i] &&
       inToolRun[i - 1];
+
+    // Collapse: when collapseThreshold is set and we're past it in a tool
+    // group, skip individual rendering. On the first collapsed tool, emit
+    // a "+N tools" summary line instead.
+    const shouldCollapse =
+      collapseThreshold > 0 &&
+      e.kind === "tool" &&
+      runPos[i] >= collapseThreshold;
+
+    if (shouldCollapse) {
+      if (runPos[i] === collapseThreshold) {
+        const remaining = runLen[i] - collapseThreshold;
+        const label = `+${remaining} tool${remaining === 1 ? "" : "s"}`;
+        process.stdout.write(DIM("● " + label) + "\n\n");
+        await sleep(runToolDelayMs);
+      }
+      // Skip to the last tool in the group (the one before the next non-tool).
+      const groupEnd = i + (runLen[i] - 1 - runPos[i]);
+      i = groupEnd;
+      const nextAfterGroup = events[i + 1];
+      if (!nextAfterGroup || nextAfterGroup.kind === "user") {
+        drawBox();
+      }
+      await sleep(runToolDelayMs);
+      continue;
+    }
 
     if (prev?.kind === "user") {
       await runSpinner(pickVerb(), opts.thinkMs);

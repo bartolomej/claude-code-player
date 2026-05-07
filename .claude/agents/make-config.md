@@ -118,7 +118,8 @@ Write a JSON config to `configs/<descriptive-name>.json`. Use the project direct
     "dim": true,
     "runThreshold": 3,
     "runToolDelayMs": 80,
-    "runSkipSpinner": true
+    "runSkipSpinner": true,
+    "collapseThreshold": 5
   },
   "filters": {
     "excludeUser": [ /* regexes */ ],
