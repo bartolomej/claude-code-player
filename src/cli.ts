@@ -58,6 +58,7 @@ async function main(): Promise<void> {
     cliVal !== undefined ? parse(cliVal) : cfgVal !== undefined ? cfgVal : fallback;
 
   const wpm = pick(values.wpm, config.speed?.wpm, 3500, Number);
+  const userWpm = pick(undefined, config.speed?.userWpm, 400, Number);
   const turnDelayMs = pick(values["turn-delay"], config.speed?.turnDelayMs, 800, Number);
   const toolDelayMs = pick(values["tool-delay"], config.speed?.toolDelayMs, 400, Number);
   const thinkMs = pick(values["think-ms"], config.speed?.thinkMs, 1400, Number);
@@ -85,6 +86,7 @@ async function main(): Promise<void> {
 
   await play(events, meta, {
     wpm,
+    userWpm,
     turnDelayMs,
     toolDelayMs,
     thinkMs,

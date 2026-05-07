@@ -6,6 +6,7 @@ import { renderMarkdown } from "./markdown.js";
 
 export interface RenderOptions {
   wpm: number;
+  userWpm: number;
   turnDelayMs: number;
   toolDelayMs: number;
   thinkMs: number;
@@ -579,11 +580,11 @@ function pickVerb(): string {
 
 // --- Main loop with persistent input box -----------------------------------
 
-function typingDelay(ch: string): number {
-  const base = 32 + Math.random() * 40;
-  if (ch === " ") return base + 20;
-  if (/[.!?,;:]/.test(ch)) return base + 100;
-  if (ch === "\n") return base + 120;
+function typingDelay(ch: string, scale: number): number {
+  const base = (32 + Math.random() * 40) * scale;
+  if (ch === " ") return base + 20 * scale;
+  if (/[.!?,;:]/.test(ch)) return base + 100 * scale;
+  if (ch === "\n") return base + 120 * scale;
   return base;
 }
 
@@ -689,10 +690,12 @@ export async function play(
       if (!boxDrawn) drawBox();
       await sleep(350);
       let typed = "";
+      const baseUserWpm = 400;
+      const scale = baseUserWpm / opts.userWpm;
       for (const ch of e.text) {
         typed += ch;
         updatePrompt(typed);
-        await sleep(typingDelay(ch));
+        await sleep(typingDelay(ch, scale));
       }
       await sleep(450); // pause after typing, before submit
       // Submit: clear the box, print transcript, redraw empty box.

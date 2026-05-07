@@ -26,6 +26,8 @@ export interface PlayerConfig {
   };
   speed?: {
     wpm?: number;
+    /** Typing speed for user messages in words per minute (default 400). */
+    userWpm?: number;
     turnDelayMs?: number;
     toolDelayMs?: number;
     thinkMs?: number;
