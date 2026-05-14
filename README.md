@@ -28,10 +28,10 @@ npm install
 
 ```sh
 # Ad-hoc: replay a session by its UUID
-npm run dev -- 00000000-0000-0000-0000-000000000000
+npx ccplay 00000000-0000-0000-0000-000000000000
 
 # Or point at a config file
-npm run dev -- examples/demo.json
+npx ccplay examples/demo.json
 ```
 
 Sessions are read from `~/.claude/projects/**/<session-id>.jsonl`. Copy

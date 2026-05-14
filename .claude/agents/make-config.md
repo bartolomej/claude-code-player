@@ -164,6 +164,7 @@ If the flow has gaps (e.g., an assistant message references something that was f
 
 Print:
 - The config file path
+- **Always** the run command: `npx ccplay <config-path>`
 - The before/after event counts
 - A brief narrative of the demo flow (the story the replay will tell)
 - Any judgment calls you made (e.g., "I excluded AskUserQuestion because the assistant always restated the user's choice")
