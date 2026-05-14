@@ -80,6 +80,7 @@ export interface EventFilters {
   excludeAssistant?: string[];
   excludeTools?: string[];
   excludeToolInput?: string[];
+  excludeAskQuestion?: string[];
   excludeNotifications?: string[];
   stopAfterAssistant?: string;
 }
@@ -102,6 +103,7 @@ export function normalize(
   const excludeAssistant = compilePatterns(filters?.excludeAssistant);
   const excludeTools = new Set(filters?.excludeTools ?? []);
   const excludeToolInput = compilePatterns(filters?.excludeToolInput);
+  const excludeAskQuestion = compilePatterns(filters?.excludeAskQuestion);
   const excludeNotifications = compilePatterns(filters?.excludeNotifications);
   const stopAfter = filters?.stopAfterAssistant
     ? new RegExp(filters.stopAfterAssistant, "i")
@@ -182,10 +184,26 @@ export function normalize(
         if (excludeToolInput && matchesAny(JSON.stringify(block.input), excludeToolInput)) continue;
         const resultText =
           typeof block.id === "string" ? results.get(block.id) : undefined;
+        let input = (block.input ?? {}) as Record<string, unknown>;
+        if (
+          block.name === "AskUserQuestion" &&
+          excludeAskQuestion &&
+          Array.isArray(input.questions)
+        ) {
+          const filtered = (input.questions as Array<{ question?: string }>).filter(
+            (q) =>
+              !(
+                typeof q?.question === "string" &&
+                matchesAny(q.question, excludeAskQuestion)
+              ),
+          );
+          if (filtered.length === 0) continue;
+          input = { ...input, questions: filtered };
+        }
         events.push({
           kind: "tool",
           name: block.name,
-          input: (block.input ?? {}) as Record<string, unknown>,
+          input,
           resultText,
         });
       }
