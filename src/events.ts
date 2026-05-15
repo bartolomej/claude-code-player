@@ -83,6 +83,15 @@ export interface EventFilters {
   excludeAskQuestion?: string[];
   excludeNotifications?: string[];
   stopAfterAssistant?: string;
+  /** Regex patterns (case-insensitive, multiline) whose matches are stripped
+   *  from assistant message text without dropping the whole message. Use this
+   *  to redact a trailing paragraph or sentence while keeping the rest. */
+  redactAssistant?: string[];
+  /** Regex patterns (case-insensitive, multiline) whose matches are stripped
+   *  from user message text and tool_result content without dropping the
+   *  whole message. Use this to redact orphaned fragments left after filtering
+   *  related events. */
+  redactUser?: string[];
 }
 
 function compilePatterns(pats?: string[]): RegExp[] | undefined {
@@ -105,6 +114,12 @@ export function normalize(
   const excludeToolInput = compilePatterns(filters?.excludeToolInput);
   const excludeAskQuestion = compilePatterns(filters?.excludeAskQuestion);
   const excludeNotifications = compilePatterns(filters?.excludeNotifications);
+  const redactAssistant = (filters?.redactAssistant ?? []).map(
+    (p) => new RegExp(p, "im"),
+  );
+  const redactUser = (filters?.redactUser ?? []).map(
+    (p) => new RegExp(p, "im"),
+  );
   const stopAfter = filters?.stopAfterAssistant
     ? new RegExp(filters.stopAfterAssistant, "i")
     : undefined;
@@ -133,7 +148,9 @@ export function normalize(
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       if (block?.type === "tool_result" && typeof block.tool_use_id === "string") {
-        results.set(block.tool_use_id, extractResultText(block.content));
+        let resultText = extractResultText(block.content);
+        for (const r of redactUser) resultText = resultText.replace(r, "");
+        results.set(block.tool_use_id, resultText);
       }
     }
   }
@@ -162,7 +179,10 @@ export function normalize(
         continue;
       }
       if (matchesAny(trimmed, excludeUser)) continue;
-      events.push({ kind: "user", text: trimmed });
+      let text = trimmed;
+      for (const r of redactUser) text = text.replace(r, "").trim();
+      if (!text) continue;
+      events.push({ kind: "user", text });
       continue;
     }
 
@@ -171,9 +191,11 @@ export function normalize(
       if (stopped) break;
       if (!block || typeof block !== "object") continue;
       if (block.type === "text" && typeof block.text === "string") {
-        const text = block.text.trim();
+        let text = block.text.trim();
         if (!text) continue;
         if (matchesAny(text, excludeAssistant)) continue;
+        for (const r of redactAssistant) text = text.replace(r, "").trim();
+        if (!text) continue;
         events.push({ kind: "assistant", text });
         if (stopAfter?.test(text)) {
           stopped = true;

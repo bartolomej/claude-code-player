@@ -15,6 +15,13 @@ export interface EventFilters {
   /** Regex pattern tested against assistant text; stops the session after
    *  the first matching message (inclusive). */
   stopAfterAssistant?: string;
+  /** Regex patterns (case-insensitive, multiline) whose matches are stripped
+   *  from assistant message text without dropping the whole message. */
+  redactAssistant?: string[];
+  /** Regex patterns (case-insensitive, multiline) whose matches are stripped
+   *  from user message text and tool_result content without dropping the
+   *  whole message. */
+  redactUser?: string[];
 }
 
 export interface PlayerConfig {
