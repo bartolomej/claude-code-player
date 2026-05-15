@@ -29,6 +29,15 @@ export interface PlayerConfig {
   user?: string;
   /** Override the working directory shown in the status line. */
   cwd?: string;
+  /** Set the terminal window title (OSC 0) for the duration of playback. */
+  windowTitle?: string;
+  /** Render into the terminal's alternate screen buffer so the launching
+   *  command and post-exit prompt are not visible in recordings. Default true
+   *  when a config file is loaded; disable with `false`. */
+  altScreen?: boolean;
+  /** Hold the final frame this many ms before exiting (default 4000). Useful
+   *  when recording so the recorder can be stopped after playback ends. */
+  endPauseMs?: number;
   agent?: {
     name?: string;
     color?: string; // hex (#d97757) or named (orange/blue/green/purple/red/yellow)

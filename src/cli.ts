@@ -86,6 +86,36 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
+  // Default alt-screen on when launched from a config file (typical for
+  // recordings); off for raw session-id invocations so a casual play doesn't
+  // wipe the user's terminal scrollback.
+  const altScreen = config.altScreen ?? isConfigPath(arg);
+  const endPauseMs = config.endPauseMs ?? 4000;
+
+  let exited = false;
+  const exitAltScreen = () => {
+    if (!exited && altScreen) {
+      process.stdout.write("\x1b[?1049l");
+      // Reset the window title to something neutral.
+      if (config.windowTitle) process.stdout.write("\x1b]0;\x07");
+      exited = true;
+    }
+  };
+  process.on("exit", exitAltScreen);
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.on(sig, () => {
+      exitAltScreen();
+      process.exit(130);
+    });
+  }
+
+  if (altScreen) {
+    process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
+  }
+  if (config.windowTitle) {
+    process.stdout.write(`\x1b]0;${config.windowTitle}\x07`);
+  }
+
   await play(events, meta, {
     wpm,
     userWpm,
@@ -94,6 +124,10 @@ async function main(): Promise<void> {
     thinkMs,
     tools: config.tools,
   });
+
+  if (endPauseMs > 0) {
+    await new Promise((r) => setTimeout(r, endPauseMs));
+  }
 }
 
 main().catch((err) => {
