@@ -27,6 +27,8 @@ export interface EventFilters {
 export interface PlayerConfig {
   sessionId: string;
   user?: string;
+  /** Override the working directory shown in the status line. */
+  cwd?: string;
   agent?: {
     name?: string;
     color?: string; // hex (#d97757) or named (orange/blue/green/purple/red/yellow)

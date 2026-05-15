@@ -188,16 +188,30 @@ export function renderHeader(meta: SessionMeta): string {
 
 function wrapPromptText(typed: string, firstBudget: number, contBudget: number): string[] {
   // Hard-wrap by character so the cursor flows naturally as the user types.
+  // Split on embedded newlines first — otherwise a `\n` ends up inside a
+  // single logical "line" and renders as multiple terminal rows, which
+  // desyncs the row count used to clear & redraw the box on each keystroke
+  // (the visible symptom: tall messages stack ghost copies during typing).
   if (typed.length === 0) return [""];
   const lines: string[] = [];
-  let remaining = typed;
-  let budget = firstBudget;
-  while (remaining.length > budget) {
-    lines.push(remaining.slice(0, budget));
-    remaining = remaining.slice(budget);
-    budget = contBudget;
+  let first = true;
+  const segments = typed.split("\n");
+  for (let s = 0; s < segments.length; s++) {
+    let remaining = segments[s];
+    // Emit at least one line per segment so a trailing/blank newline produces
+    // an empty row (matching how the user sees their own paragraph breaks).
+    do {
+      const budget = first ? firstBudget : contBudget;
+      if (remaining.length > budget) {
+        lines.push(remaining.slice(0, budget));
+        remaining = remaining.slice(budget);
+      } else {
+        lines.push(remaining);
+        remaining = "";
+      }
+      first = false;
+    } while (remaining.length > 0);
   }
-  lines.push(remaining);
   return lines;
 }
 

@@ -79,6 +79,8 @@ async function main(): Promise<void> {
     : undefined;
   meta.userName = userOverride ?? defaultUser;
 
+  if (config.cwd) meta.cwd = config.cwd;
+
   if (events.length === 0) {
     process.stderr.write("No playable events found in this session.\n");
     process.exit(2);
